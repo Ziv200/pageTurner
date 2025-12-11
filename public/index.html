@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PageTurner</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="/socket.io/socket.io.js"></script>
+
+    <!-- Legacy PDF.js for older iPads -->
+    <script src="/lib/pdf.js"></script>
+
+    <!-- Error Logging (Preserved) -->
+    <script>
+        window.onerror = function (msg, url, lineNo, columnNo, error) {
+            alert('JS ERROR: ' + msg);
+            // Also log to screen
+            var div = document.createElement('div');
+            div.style.cssText = 'color:red;background:white;padding:10px;position:absolute;top:0;left:0;z-index:9999;white-space:pre-wrap;';
+            div.innerText = "JS ERROR:\n" + msg + "\n" + JSON.stringify(error);
+            document.body.appendChild(div);
+        };
+    </script>
+
+    <!-- Main Script (No Module) -->
+    <script src="script.js" defer></script>
+</head>
+
+<body>
+    <div id="container">
+        <div id="error-message"
+            style="display:none; color: red; text-align: center; padding: 20px; font-size: 20px; background: white;">
+            PDF not found. Please ensure 'score.pdf' is in the 'public' folder.
+        </div>
+        <div id="loading-message" style="color: white; font-size: 24px;">Loading PDF...</div>
+        <canvas id="the-canvas" style="display:none;"></canvas>
+        <div id="page-indicator"></div>
+    </div>
+</body>
+
+</html>
