@@ -87,16 +87,19 @@ function queueRenderPage(num) {
 const emptyState = document.getElementById('empty-state');
 const mainLoadBtn = document.getElementById('main-load-btn');
 const loadingMessage = document.getElementById('loading-message');
+const filenameDisplay = document.getElementById('filename-display');
 
 function showEmptyState() {
     canvas.style.display = 'none';
     if (loadingMessage) loadingMessage.style.display = 'none';
+    filenameDisplay.style.display = 'none';
     emptyState.style.display = 'flex';
 }
 
 function hideEmptyState() {
     emptyState.style.display = 'none';
     canvas.style.display = 'block';
+    filenameDisplay.style.display = 'block';
 }
 
 // Initial state
@@ -244,6 +247,7 @@ pdfUploadInput.addEventListener('change', (e) => {
                 pdfDoc = pdfDoc_;
                 console.log('Local PDF Loaded. Pages: ' + pdfDoc.numPages);
 
+                filenameDisplay.innerText = file.name;
                 hideEmptyState(); // Show canvas, hide empty state
 
                 // Close modal automatically on success (optional, user might prefer it stays open)

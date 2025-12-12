@@ -173,3 +173,24 @@ canvas {
     background-color: #1976D2;
     transform: scale(1.05);
 }
+
+#filename-display {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 5px 15px;
+    border-radius: 5px;
+    font-family: sans-serif;
+    font-size: 14px;
+    pointer-events: none;
+    z-index: 10;
+    max-width: 300px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: none;
+    /* Hidden by default */
+}
