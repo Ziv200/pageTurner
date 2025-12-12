@@ -88,7 +88,12 @@ if (requestedInput) {
 
 // Fallback logic
 if (!initialPort) {
-    initialPort = inputs.find(name => name.includes('IAC') || name.includes('Bus 2'));
+    // 1. Priority: Look specifically for "Bus 2" (common for this setup)
+    initialPort = inputs.find(name => name.includes('Bus 2'));
+}
+if (!initialPort) {
+    // 2. Secondary: Look for any "IAC" driver
+    initialPort = inputs.find(name => name.includes('IAC'));
 }
 if (!initialPort && inputs.length > 0) {
     initialPort = inputs[0];
