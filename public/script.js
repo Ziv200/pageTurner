@@ -113,22 +113,33 @@ socket.on('page_change', function (data) {
 });
 
 // Manual Navigation (Tap/Click)
-window.addEventListener('click', (e) => {
+// Navigation Handler
+function handleNavigation(e) {
     if (!pdfDoc) return;
 
+    // Prevent double firing if both touch and click events occur
+    if (e.type === 'touchend') {
+        e.preventDefault();
+    }
+
     const width = window.innerWidth;
-    const clickX = e.clientX;
+    // Handle both mouse/click and touch events
+    const clientX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
 
     // Left 30% -> Previous Page
-    if (clickX < width * 0.3) {
+    if (clientX < width * 0.3) {
         if (pageNum <= 1) return;
         pageNum--;
         queueRenderPage(pageNum);
     }
     // Right 30% -> Next Page
-    else if (clickX > width * 0.7) {
+    else if (clientX > width * 0.7) {
         if (pageNum >= pdfDoc.numPages) return;
         pageNum++;
         queueRenderPage(pageNum);
     }
-});
+}
+
+// Manual Navigation (Tap/Click)
+window.addEventListener('click', handleNavigation);
+window.addEventListener('touchend', handleNavigation, { passive: false });
