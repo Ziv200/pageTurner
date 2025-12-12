@@ -7,7 +7,8 @@ html {
     background-color: #333;
     overflow: hidden;
     /* Prevent scrolling if possible */
-    cursor: pointer; /* iOS Safari fix for click bubbling */
+    cursor: pointer;
+    /* iOS Safari fix for click bubbling */
 }
 
 #container {
@@ -37,4 +38,99 @@ canvas {
     font-size: 16px;
     pointer-events: none;
     z-index: 10;
+}
+
+/* Settings Button */
+#settings-btn {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    width: 40px;
+    height: 40px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 20;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    transition: background-color 0.3s;
+}
+
+#settings-btn:hover {
+    background-color: rgba(0, 0, 0, 0.8);
+}
+
+#settings-btn svg {
+    width: 24px;
+    height: 24px;
+}
+
+/* Settings Modal */
+#settings-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    display: none;
+    /* Hidden by default */
+    justify-content: center;
+    align-items: center;
+    z-index: 30;
+}
+
+.modal-content {
+    background-color: #222;
+    color: white;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    width: 90%;
+    max-width: 400px;
+    font-family: sans-serif;
+}
+
+.modal-content h2 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.setting-group {
+    margin-bottom: 20px;
+}
+
+.setting-group label {
+    display: block;
+    margin-bottom: 10px;
+}
+
+.setting-group select {
+    width: 100%;
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid #555;
+    background-color: #333;
+    color: white;
+    font-size: 16px;
+}
+
+#close-settings-btn {
+    width: 100%;
+    padding: 10px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+#close-settings-btn:hover {
+    background-color: #45a049;
 }

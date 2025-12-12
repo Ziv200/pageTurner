@@ -115,6 +115,11 @@ socket.on('page_change', function (data) {
 // Manual Navigation (Tap/Click)
 // Navigation Handler
 function handleNavigation(e) {
+    // If modal is open, verify clicks are not on the settings button
+    if (document.getElementById('settings-modal').style.display === 'flex') {
+        return;
+    }
+
     if (!pdfDoc) return;
 
     // Prevent double firing if both touch and click events occur
@@ -125,6 +130,16 @@ function handleNavigation(e) {
     const width = window.innerWidth;
     // Handle both mouse/click and touch events
     const clientX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
+
+    // Check if click is on settings button - if so, ignore navigation
+    // This is a safety check, though z-index should handle it
+    const settingsBtn = document.getElementById('settings-btn');
+    const rect = settingsBtn.getBoundingClientRect();
+    if (clientX >= rect.left && clientX <= rect.right &&
+        (e.changedTouches ? e.changedTouches[0].clientY : e.clientY) >= rect.top &&
+        (e.changedTouches ? e.changedTouches[0].clientY : e.clientY) <= rect.bottom) {
+        return;
+    }
 
     // Left 30% -> Previous Page
     if (clientX < width * 0.3) {
@@ -141,5 +156,74 @@ function handleNavigation(e) {
 }
 
 // Manual Navigation (Tap/Click)
-window.addEventListener('click', handleNavigation);
-window.addEventListener('touchend', handleNavigation, { passive: false });
+window.addEventListener('click', (e) => {
+    // Check if target is inside modal or is settings button
+    if (e.target.closest('#settings-modal') || e.target.closest('#settings-btn')) {
+        return;
+    }
+    handleNavigation(e);
+});
+window.addEventListener('touchend', (e) => {
+    // Check if target is inside modal or is settings button
+    if (e.target.closest('#settings-modal') || e.target.closest('#settings-btn')) {
+        return;
+    }
+    handleNavigation(e);
+}, { passive: false });
+
+
+// --- Settings UI Logic ---
+const settingsBtn = document.getElementById('settings-btn');
+const settingsModal = document.getElementById('settings-modal');
+const closeSettingsBtn = document.getElementById('close-settings-btn');
+const midiPortSelect = document.getElementById('midi-port-select');
+
+// Open Modal
+settingsBtn.addEventListener('click', () => {
+    settingsModal.style.display = 'flex';
+    socket.emit('get_midi_ports'); // Refresh ports when opening
+});
+
+// Close Modal
+closeSettingsBtn.addEventListener('click', () => {
+    settingsModal.style.display = 'none';
+});
+
+// Select MIDI Port
+midiPortSelect.addEventListener('change', (e) => {
+    const selectedPort = e.target.value;
+    if (selectedPort) {
+        socket.emit('set_midi_port', selectedPort);
+    }
+});
+
+// --- Socket.io MIDI Events ---
+socket.on('midi_status', (data) => {
+    updateMidiList(data.availablePorts, data.connectedPort);
+});
+
+socket.on('midi_ports_list', (data) => {
+    updateMidiList(data.ports, data.active);
+});
+
+function updateMidiList(ports, activePort) {
+    midiPortSelect.innerHTML = ''; // Clear existing
+
+    if (ports.length === 0) {
+        const option = document.createElement('option');
+        option.text = "No MIDI Ports Found";
+        option.disabled = true;
+        midiPortSelect.appendChild(option);
+        return;
+    }
+
+    ports.forEach(port => {
+        const option = document.createElement('option');
+        option.value = port;
+        option.text = port;
+        if (port === activePort) {
+            option.selected = true;
+        }
+        midiPortSelect.appendChild(option);
+    });
+}

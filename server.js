@@ -15,59 +15,87 @@ const PORT = 3000;
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/lib', express.static(path.join(__dirname, 'node_modules/pdfjs-dist/build')));
 
-// MIDI Setup
-const inputs = easymidi.getInputs();
-console.log('Available MIDI Inputs:', inputs);
+// MIDI State
+let midiInput = null;
+let currentMidiInputName = null;
 
-// Check if a specific input was requested via command line
-// Usage: node server.js "My MIDI Device"
-const requestedInput = process.argv[2];
+function getMidiPorts() {
+    return easymidi.getInputs();
+}
 
-let midiInputName;
-
-if (requestedInput) {
-    // Try to find exact match or partial match for the requested name
-    midiInputName = inputs.find(name => name.toLowerCase().includes(requestedInput.toLowerCase()));
-    if (!midiInputName) {
-        console.warn(`\n⚠️ Requested MIDI input "${requestedInput}" not found.`);
-        console.warn('Available inputs:', inputs);
+function closeMidiPort() {
+    if (midiInput) {
+        try {
+            midiInput.close();
+        } catch (e) {
+            console.error('Error closing MIDI port:', e);
+        }
+        midiInput = null;
     }
 }
 
-// Fallback: Custom logic if no specific input requested or found
-if (!midiInputName) {
-    // We look for "IAC" or "Bus 1" as common inter-app drivers
-    midiInputName = inputs.find(name => name.includes('IAC') || name.includes('Bus 2'));
-}
+function setMidiPort(portName) {
+    if (portName === currentMidiInputName && midiInput) {
+        console.log(`Already connected to ${portName}`);
+        return true;
+    }
 
-// Fallback to the first available input if still null
-if (!midiInputName && inputs.length > 0) {
-    midiInputName = inputs[0];
-    console.log(`No preferred driver found. Defaulting to first input: ${midiInputName}`);
-}
+    closeMidiPort();
 
-if (midiInputName) {
     try {
-        const input = new easymidi.Input(midiInputName);
-        console.log(`\n✅ Listening to MIDI Input: "${midiInputName}"`);
+        const inputs = getMidiPorts();
+        // Exact match or fallback to partial match
+        const exactMatch = inputs.find(i => i === portName);
+        // If exact match not found, try finding one that includes the name (logic from before)
+        const targetName = exactMatch || inputs.find(i => i.toLowerCase().includes(portName.toLowerCase()));
+
+        if (!targetName) {
+            console.warn(`MIDI Input "${portName}" not found.`);
+            return false;
+        }
+
+        midiInput = new easymidi.Input(targetName);
+        currentMidiInputName = targetName;
+
+        console.log(`\n✅ Listening to MIDI Input: "${targetName}"`);
         console.log('   Mapping: MIDI Program Change -> PDF Page Number');
 
-
-
-        // Also listen for Program Change if user prefers that later
-        input.on('program', (msg) => {
-            // User reports they are getting 1 page before the right one.
-            // This means they send "2" -> We receive "1" -> We need to go to "2".
-            // So we restore the +1 offset (Standard MIDI is 0-indexed).
+        midiInput.on('program', (msg) => {
             const pageNumber = msg.number + 1;
-
             console.log(`🎛️ MIDI Program Change (Raw: ${msg.number}) -> Jump to Page ${pageNumber}`);
             io.emit('page_change', { page: pageNumber });
         });
 
+        return true;
     } catch (err) {
         console.error('❌ Error connecting to MIDI input:', err);
+        currentMidiInputName = null;
+        return false;
     }
+}
+
+// Initial Setup
+const inputs = getMidiPorts();
+console.log('Available MIDI Inputs:', inputs);
+
+// Check command line arg
+const requestedInput = process.argv[2];
+let initialPort = null;
+
+if (requestedInput) {
+    initialPort = inputs.find(name => name.toLowerCase().includes(requestedInput.toLowerCase()));
+}
+
+// Fallback logic
+if (!initialPort) {
+    initialPort = inputs.find(name => name.includes('IAC') || name.includes('Bus 2'));
+}
+if (!initialPort && inputs.length > 0) {
+    initialPort = inputs[0];
+}
+
+if (initialPort) {
+    setMidiPort(initialPort);
 } else {
     console.log('\n⚠️ No MIDI Inputs found! Make sure IAC Driver is enabled in Audio MIDI Setup.');
 }
@@ -75,6 +103,29 @@ if (midiInputName) {
 // Socket.io Connection
 io.on('connection', (socket) => {
     console.log('📱 Client connected:', socket.id);
+
+    // Send current state on connection
+    socket.emit('midi_status', {
+        connectedPort: currentMidiInputName,
+        availablePorts: getMidiPorts()
+    });
+
+    socket.on('get_midi_ports', () => {
+        socket.emit('midi_ports_list', {
+            ports: getMidiPorts(),
+            active: currentMidiInputName
+        });
+    });
+
+    socket.on('set_midi_port', (portName) => {
+        console.log(`Client requested to switch MIDI port to: ${portName}`);
+        const success = setMidiPort(portName);
+        // Broadcast new status to all clients
+        io.emit('midi_status', {
+            connectedPort: currentMidiInputName,
+            availablePorts: getMidiPorts()
+        });
+    });
 
     socket.on('disconnect', () => {
         console.log('Client disconnected');
