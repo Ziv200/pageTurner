@@ -79,21 +79,46 @@ function queueRenderPage(num) {
     }
 }
 
+
+
+/**
+ * Empty State Logic
+ */
+const emptyState = document.getElementById('empty-state');
+const mainLoadBtn = document.getElementById('main-load-btn');
+const loadingMessage = document.getElementById('loading-message');
+
+function showEmptyState() {
+    canvas.style.display = 'none';
+    if (loadingMessage) loadingMessage.style.display = 'none';
+    emptyState.style.display = 'flex';
+}
+
+function hideEmptyState() {
+    emptyState.style.display = 'none';
+    canvas.style.display = 'block';
+}
+
+// Initial state
+showEmptyState();
+
+// Main "Load PDF" button triggers the file input in settings
+mainLoadBtn.addEventListener('click', () => {
+    // We can just click the file input directly, or open settings.
+    // Opening settings is clearer as it shows context.
+    // user wants "load file button" -> clicking it should probably just pick file
+    // but the input is in the modal. Let's trigger the input click directly for smoother UX
+    // but note: file input is hidden in settings logic usually? 
+    // It's visible in settings. Let's redirect to opening the file dialog directly.
+    pdfUploadInput.click();
+});
+
+
 /**
  * Asynchronously downloads PDF.
  */
-pdfjsLib.getDocument(url).promise.then(function (pdfDoc_) {
-    pdfDoc = pdfDoc_;
-    console.log('PDF Loaded. Pages: ' + pdfDoc.numPages);
-
-    // Render first page
-    renderPage(pageNum);
-}, function (reason) {
-    // Error loading PDF
-    console.error('Error loading PDF:', reason);
-    document.getElementById('error-message').style.display = 'block';
-    document.getElementById('error-message').innerText = `Error loading 'score.pdf'. Make sure it is in the public folder.`;
-});
+// REMOVED DEFAULT LOADING
+// pdfjsLib.getDocument(url).promise.then(...)
 
 // Socket Listeners
 socket.on('connect', () => {
@@ -177,6 +202,7 @@ const settingsBtn = document.getElementById('settings-btn');
 const settingsModal = document.getElementById('settings-modal');
 const closeSettingsBtn = document.getElementById('close-settings-btn');
 const midiPortSelect = document.getElementById('midi-port-select');
+const pdfUploadInput = document.getElementById('pdf-upload');
 
 // Open Modal
 settingsBtn.addEventListener('click', () => {
@@ -194,6 +220,43 @@ midiPortSelect.addEventListener('change', (e) => {
     const selectedPort = e.target.value;
     if (selectedPort) {
         socket.emit('set_midi_port', selectedPort);
+    }
+});
+
+// Load Local PDF
+pdfUploadInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file && file.type === 'application/pdf') {
+        const fileReader = new FileReader();
+
+        fileReader.onload = function () {
+            const typedarray = new Uint8Array(this.result);
+
+            // Unload current PDF if any (optional, but good practice if we were tracking more state)
+            pdfDoc = null;
+            pageNum = 1;
+            document.getElementById('loading-message').style.display = 'block';
+            document.getElementById('loading-message').innerText = `Loading ${file.name}...`;
+            canvas.style.display = 'none';
+
+            // Load the new PDF
+            pdfjsLib.getDocument(typedarray).promise.then(function (pdfDoc_) {
+                pdfDoc = pdfDoc_;
+                console.log('Local PDF Loaded. Pages: ' + pdfDoc.numPages);
+
+                hideEmptyState(); // Show canvas, hide empty state
+
+                // Close modal automatically on success (optional, user might prefer it stays open)
+                // settingsModal.style.display = 'none'; 
+
+                renderPage(pageNum);
+            }, function (reason) {
+                console.error('Error loading local PDF:', reason);
+                alert('Error loading PDF: ' + reason);
+            });
+        };
+
+        fileReader.readAsArrayBuffer(file);
     }
 });
 

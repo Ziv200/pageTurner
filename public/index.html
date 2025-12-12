@@ -29,11 +29,12 @@
 
 <body>
     <div id="container">
-        <div id="error-message"
-            style="display:none; color: red; text-align: center; padding: 20px; font-size: 20px; background: white;">
-            PDF not found. Please ensure 'score.pdf' is in the 'public' folder.
+        <div id="empty-state">
+            <h1>No Score Loaded</h1>
+            <p>Load a PDF to begin</p>
+            <button id="main-load-btn">Load PDF</button>
         </div>
-        <div id="loading-message" style="color: white; font-size: 24px;">Loading PDF...</div>
+        <div id="loading-message" style="display:none; color: white; font-size: 24px;">Loading PDF...</div>
         <canvas id="the-canvas" style="display:none;"></canvas>
         <div id="page-indicator"></div>
 
@@ -55,7 +56,17 @@
                         <option value="" disabled selected>Loading...</option>
                     </select>
                 </div>
-                <button id="close-settings-btn">Close</button>
+
+                <div class="setting-group" style="padding-top: 20px; border-top: 1px solid #444;">
+                    <label for="pdf-upload">Load Local PDF:</label>
+                    <input type="file" id="pdf-upload" accept="application/pdf" style="color: white;">
+                    <small style="display: block; color: #aaa; margin-top: 5px;">Replaces current score on this device
+                        only.</small>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <button id="close-settings-btn">Close</button>
+                </div>
             </div>
         </div>
     </div>
