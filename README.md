@@ -65,11 +65,32 @@ npm start
 *The server will start and display your local IP address, e.g., `http://192.168.1.5:3000`.*
 
 ### 2. Connect the Client (iPad/Tablet)
+**Choose one of the following methods:**
 
-1.  Ensure your tablet is on the **same Wi-Fi network** as your computer.
-2.  Open **Safari** or **Chrome** on the tablet.
-3.  Enter the URL displayed in the server terminal (e.g., `http://192.168.1.5:3000`).
-4.  You should see the "No Score Loaded" screen.
+#### Method A: Standard Wi-Fi Control
+*Best for rehearsals or when a router is available.*
+1.  Ensure both your computer and iPad are on the **exact same Wi-Fi network**.
+2.  Use the IP address displayed in the terminal (usually `192.168.x.x` or `10.0.x.x`).
+
+#### Method B: Wired Offline Control (USB) ⚡️
+*Best for live shows. Low latency, no Wi-Fi interference, 100% reliable.*
+1.  **Configure Mac Settings (Crucial!):**
+    *   Go to **System Settings** -> **General** -> **Sharing**.
+    *   **Do NOT** use "Content Caching" (common mistake).
+    *   Find **Internet Sharing** (click the `i` info icon).
+    *   "Share your connection from": Choose anything (e.g. Wi-Fi or Ethernet).
+    *   "To computers using": **Check "iPhone USB"**.
+    *   **Turn the main "Internet Sharing" toggle ON.**
+2.  **Connect iPad in this order:**
+    *   Unplug the iPad USB cable.
+    *   Wait 5 seconds.
+    *   Plug it back in (Say "Trust" on iPad if asked).
+3.  **Find the Address:**
+    *   Run `npm start`.
+    *   Look for a **Bridge** IP (often `192.168.2.x`) or a **Link-Local** IP (`169.254.x.x`).
+    *   *Pro Tip:* Try using your computer's local hostname:
+        `http://Your-MacBook-Name.local:3000`
+        *(e.g., `http://MacBook-Pro.local:3000`)*
 
 ### 3. Load a Score
 
@@ -112,14 +133,9 @@ The app listens for MIDI **Program Change** messages. It maps the Program Change
 ## 🔧 Troubleshooting
 
 *   **"npm command not found"**: You need to install Node.js.
-*   **iPad won't connect (Offline/USB)**:
-    *   **Enable Internet Sharing (Crucial):**
-        1.  Go to System Settings -> General -> Sharing.
-        2.  Click the `i` (info) next to **Internet Sharing**.
-        3.  Set "Share from" to anything (e.g. Wi-Fi).
-        4.  Set "To computers using" to **iPhone USB**.
-        5.  Turn the main **Internet Sharing** toggle **ON**.
-    *   Restart the server (`npm start`) and look for a `192.168.x.x` or `169.254.x.x` address.
+*   **"OFFLINE MODE DETECTED"**:
+    *   This means your Mac hasn't assigned an IP to the USB cable yet.
+    *   **Fix:** Toggle "Internet Sharing" OFF -> Wait 5s -> Turn ON. Then Replug iPad.
 *   **MIDI not working**:
     *   Check the server console log. It should say `Listening to MIDI Input: "Your Port"`.
     *   Open the Settings menu on the iPad and manually select the correct port.
