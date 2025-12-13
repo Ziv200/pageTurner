@@ -139,8 +139,37 @@ io.on('connection', (socket) => {
 
 // Start Server
 server.listen(PORT, () => {
-    const localIp = ip.address();
     console.log('\n🚀 Server running!');
-    console.log(`\n👉 ON YOUR IPAD, OPEN: http://${localIp}:${PORT}`);
+    console.log('-----------------------------------------------');
+    console.log('📡 Available Network Addresses:');
+
+    const os = require('os');
+    const interfaces = os.networkInterfaces();
+    let externalCount = 0;
+
+    Object.keys(interfaces).forEach((ifname) => {
+        interfaces[ifname].forEach((iface) => {
+            // Only show IPv4, non-internal (skip localhost)
+            if ('IPv4' === iface.family && !iface.internal) {
+                console.log(`   👉 http://${iface.address}:${PORT}  (${ifname})`);
+                externalCount++;
+            }
+        });
+    });
+
+    if (externalCount === 0) {
+        console.log('   (No external network addresses found)');
+        console.log('\n⚠️  OFFLINE MODE DETECTED');
+        console.log('   Your Mac has not assigned an IP address to the USB cable yet.');
+        console.log('   1. Toggle "Internet Sharing" OFF and back ON in System Settings.');
+        console.log('   2. Unplug and replug the iPad.');
+        console.log('   3. Restart this server.');
+
+        console.log('\n🏠 Localhost (Mac only):');
+        console.log(`   👉 http://127.0.0.1:${PORT}`);
+    }
+
+    console.log('\nℹ️  Tip: If offline/USB, try the address starting with 192.x or 169.x');
     console.log('-----------------------------------------------');
 });
+

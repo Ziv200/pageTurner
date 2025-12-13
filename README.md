@@ -112,9 +112,14 @@ The app listens for MIDI **Program Change** messages. It maps the Program Change
 ## 🔧 Troubleshooting
 
 *   **"npm command not found"**: You need to install Node.js.
-*   **iPad won't connect**:
-    *   Check that both devices are on the *exact same* Wi-Fi network.
-    *   Disable any firewall/VPN on your computer temporarily.
+*   **iPad won't connect (Offline/USB)**:
+    *   **Enable Internet Sharing (Crucial):**
+        1.  Go to System Settings -> General -> Sharing.
+        2.  Click the `i` (info) next to **Internet Sharing**.
+        3.  Set "Share from" to anything (e.g. Wi-Fi).
+        4.  Set "To computers using" to **iPhone USB**.
+        5.  Turn the main **Internet Sharing** toggle **ON**.
+    *   Restart the server (`npm start`) and look for a `192.168.x.x` or `169.254.x.x` address.
 *   **MIDI not working**:
     *   Check the server console log. It should say `Listening to MIDI Input: "Your Port"`.
     *   Open the Settings menu on the iPad and manually select the correct port.
