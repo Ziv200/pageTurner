@@ -86,11 +86,11 @@ npm start
     *   Wait 5 seconds.
     *   Plug it back in (Say "Trust" on iPad if asked).
 3.  **Find the Address:**
-    *   Run `npm start`.
-    *   Look for a **Bridge** IP (often `192.168.2.x`) or a **Link-Local** IP (`169.254.x.x`).
-    *   *Pro Tip:* Try using your computer's local hostname:
-        `http://Your-MacBook-Name.local:3000`
-        *(e.g., `http://MacBook-Pro.local:3000`)*
+    *   **Recommended:** Use your computer's local name directly.
+        Type this into Safari on iPad:
+        👉 `http://MacBook-Pro-Ilan.local:3000`
+        *(Replace `MacBook-Pro-Ilan` with your actual computer name found in System Settings -> General -> Sharing).*
+    *   **Alternative:** Run `npm start` and look for a **Bridge** IP (often `192.168.2.x`) or a **Link-Local** IP (`169.254.x.x`).
 
 ### 3. Load a Score
 

@@ -147,6 +147,15 @@ server.listen(PORT, () => {
     const interfaces = os.networkInterfaces();
     let externalCount = 0;
 
+    // 0. Show Hostname (Best for Offline/USB)
+    const hostname = os.hostname();
+    if (hostname) {
+        // Ensure it ends with .local if not present (simple heuristic)
+        const localHostname = hostname.endsWith('.local') ? hostname : `${hostname}.local`;
+        console.log(`   👉 http://${localHostname}:${PORT}  (Recommended for Offline/USB)`);
+    }
+
+    // 1. Show External Interfaces (reachable by iPad)
     Object.keys(interfaces).forEach((ifname) => {
         interfaces[ifname].forEach((iface) => {
             // Only show IPv4, non-internal (skip localhost)
