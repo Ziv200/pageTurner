@@ -122,7 +122,10 @@ module.exports = function createComposer(io) {
 
     function publicState() {
         if (!active) return { active: false };
-        return { active: true, name: active.name, rev: active.rev, songs: Array.from(active.songs), current };
+        const pcs = {};   // song -> Ableton-style Pgm numbers that open it (ascending)
+        active.rows.forEach(r => { (pcs[r.song] = pcs[r.song] || []).push(r.pc); });
+        Object.keys(pcs).forEach(k => pcs[k].sort((a, b) => a - b));
+        return { active: true, name: active.name, rev: active.rev, songs: Array.from(active.songs), pcs, current };
     }
 
     async function setActive(name) {

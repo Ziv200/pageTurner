@@ -166,4 +166,6 @@ Composer maps MIDI **Program Change** numbers to a **song (PDF) and page**. You 
 - *No active project:* exactly as before. Load a PDF on the device, and Ableton `Pgm N` jumps to page *N*.
 - Program Change numbers in the table are the numbers **as displayed by Ableton** (`Pgm N`, 1–128). The server converts the raw MIDI value (0–127) to N = value + 1, in one place, for both real MIDI and the Test button. Projects saved earlier keep their stored numbers unchanged (no migration): a row with number 0 now shows red as invalid and must be changed to 1–128, and other rows may need +1 if they were entered as raw values.
 
+**Song list in the viewer:** with a project active, the hamburger icon (top right) opens a sidebar listing all songs in Composer's name order, with the current song highlighted and the Pgm numbers that open it. Tapping a song loads it on page 1 on that device only. Without an active project it shows "No active project".
+
 **Ports:** Composer uses the same server and port 3000 as PageTurner (`PORT=…` to change). It does not touch AbleSet on port 80.

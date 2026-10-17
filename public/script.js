@@ -144,6 +144,89 @@ let lastSeq = -1;
 let loadToken = 0;
 const docCache = {};         // song -> Promise<pdfDoc>
 let noticeTimer = null;
+let projectSongs = [];       // song names, ordered like Composer (numeric-prefix sort)
+let projectPcs = {};         // song -> [Ableton-style Pgm numbers]
+
+// Same ordering as Composer: leading number in the file name, then name.
+function nameKey(name) {
+    const n = String(name || '').replace(/\.pdf$/i, ''), m = /^\s*(\d+)\s*[-_.\s]*/.exec(n);
+    return m ? { num: parseInt(m[1], 10), rest: n.slice(m[0].length) } : { num: null, rest: n };
+}
+function cmpNames(a, b) {
+    const x = nameKey(a), y = nameKey(b);
+    if (x.num !== null && y.num === null) return -1;
+    if (x.num === null && y.num !== null) return 1;
+    if (x.num !== null && x.num !== y.num) return x.num - y.num;
+    return x.rest.localeCompare(y.rest, undefined, { numeric: true, sensitivity: 'base' }) || String(a).localeCompare(String(b), undefined, { numeric: true });
+}
+
+// --- Song sidebar ---
+const menuBtn = document.getElementById('menu-btn');
+const sidebar = document.getElementById('sidebar');
+const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+const sidebarList = document.getElementById('sidebar-list');
+const sidebarClose = document.getElementById('sidebar-close');
+
+function renderSidebar() {
+    sidebarList.innerHTML = '';
+    if (!projectActive || !projectSongs.length) {
+        const d = document.createElement('div');
+        d.id = 'sidebar-empty';
+        d.innerText = 'No active project';
+        sidebarList.appendChild(d);
+        return;
+    }
+    projectSongs.forEach(function (song) {
+        const item = document.createElement('div');
+        item.className = 'song-item' + (song === currentSong ? ' current' : '');
+        item.setAttribute('data-song', song);
+        const nm = document.createElement('div');
+        nm.className = 'song-name';
+        nm.innerText = song.replace(/\.pdf$/i, '');
+        item.appendChild(nm);
+        const pcs = projectPcs[song];
+        if (pcs && pcs.length) {
+            const pg = document.createElement('div');
+            pg.className = 'song-pgm';
+            pg.innerText = 'Pgm ' + pcs.join(', ');
+            item.appendChild(pg);
+        }
+        item.addEventListener('click', function () {
+            // manual choice on this viewer only: song from page 1 (same loading path as a Program Change)
+            closeSidebar();
+            applySelection({ seq: lastSeq, pc: null, song: song, page: 1 });
+        });
+        sidebarList.appendChild(item);
+    });
+}
+function markCurrentSong() {
+    const items = sidebarList.querySelectorAll('.song-item');
+    let cur = null;
+    for (let i = 0; i < items.length; i++) {
+        const on = items[i].getAttribute('data-song') === currentSong;
+        items[i].className = 'song-item' + (on ? ' current' : '');
+        if (on) cur = items[i];
+    }
+    return cur;
+}
+function openSidebar() {
+    renderSidebar();
+    const cur = markCurrentSong();
+    sidebar.className = 'open';
+    sidebar.setAttribute('aria-hidden', 'false');
+    sidebarBackdrop.style.display = 'block';
+    document.body.classList.add('sidebar-open');
+    if (cur) sidebarList.scrollTop = Math.max(0, cur.offsetTop - sidebarList.clientHeight / 3);
+}
+function closeSidebar() {
+    sidebar.className = '';
+    sidebar.setAttribute('aria-hidden', 'true');
+    sidebarBackdrop.style.display = 'none';
+    document.body.classList.remove('sidebar-open');
+}
+menuBtn.addEventListener('click', function (e) { e.stopPropagation(); openSidebar(); });
+sidebarClose.addEventListener('click', function (e) { e.stopPropagation(); closeSidebar(); });
+sidebarBackdrop.addEventListener('click', function (e) { e.stopPropagation(); closeSidebar(); });
 
 function showNotice(text, ms) {
     noticeEl.innerText = text;
@@ -153,6 +236,7 @@ function showNotice(text, ms) {
 }
 
 function updateSongInfo() {
+    markCurrentSong();
     if (!projectActive || !currentSong) { songInfoEl.style.display = 'none'; return; }
     const pages = pdfDoc ? ' / ' + pdfDoc.numPages : '';
     songInfoEl.innerText = (currentPc !== null ? 'Pgm ' + currentPc + '  \u00b7  ' : '') +
@@ -228,10 +312,15 @@ socket.on('project_state', function (st) {
         if (projectActive) { projectActive = false; currentSong = null; updateSongInfo(); }
         projectActive = false;
         projectName = '';
+        projectSongs = []; projectPcs = {};
+        renderSidebar();
         return;
     }
     const changed = !projectActive || st.rev !== projectRev;
     projectActive = true;
+    projectSongs = (st.songs || []).slice().sort(cmpNames);
+    projectPcs = st.pcs || {};
+    renderSidebar();
     projectName = st.name;
     if (changed) {
         projectRev = st.rev;
@@ -278,6 +367,7 @@ function handleNavigation(e) {
     }
 
     if (!pdfDoc) return;
+    if (sidebar.className === 'open') return;
 
     // Prevent double firing if both touch and click events occur
     if (e.type === 'touchend') {
@@ -315,14 +405,16 @@ function handleNavigation(e) {
 // Manual Navigation (Tap/Click)
 window.addEventListener('click', (e) => {
     // Check if target is inside modal or is settings button
-    if (e.target.closest('#settings-modal') || e.target.closest('#settings-btn')) {
+    if (e.target.closest('#settings-modal') || e.target.closest('#settings-btn') ||
+        e.target.closest('#menu-btn') || e.target.closest('#sidebar') || e.target.closest('#sidebar-backdrop')) {
         return;
     }
     handleNavigation(e);
 });
 window.addEventListener('touchend', (e) => {
     // Check if target is inside modal or is settings button
-    if (e.target.closest('#settings-modal') || e.target.closest('#settings-btn')) {
+    if (e.target.closest('#settings-modal') || e.target.closest('#settings-btn') ||
+        e.target.closest('#menu-btn') || e.target.closest('#sidebar') || e.target.closest('#sidebar-backdrop')) {
         return;
     }
     handleNavigation(e);
