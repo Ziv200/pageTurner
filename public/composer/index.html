@@ -6,11 +6,11 @@
     <title>PageTurner Composer</title>
     <link rel="stylesheet" href="composer.css">
     <script src="../vendor/pdf.min.js"></script>
-    <script src="../vendor/pdf-lib.min.js"></script>
 </head>
 <body>
 <header>
     <h1>Composer</h1>
+    <div id="active-banner" class="banner">No active project &ndash; viewer uses plain Program Change &rarr; page</div>
     <a class="back" href="/">&larr; PageTurner</a>
 </header>
 
@@ -21,41 +21,57 @@
         </label>
         <div class="buttons">
             <button id="btn-new">New</button>
-            <button id="btn-open-mac">Open from Mac&hellip;</button>
-            <button id="btn-open-file">Open .pdset file&hellip;</button>
-            <button id="btn-save-mac" class="primary">Save to Mac</button>
-            <button id="btn-save-file">Download .pdset</button>
+            <button id="btn-open-mac">Open&hellip;</button>
+            <button id="btn-save-mac">Save</button>
+            <button id="btn-save-file" title="Download a copy of the .pdset file">Download .pdset</button>
+            <button id="btn-open-file" title="Open a .pdset file from disk">Open .pdset file&hellip;</button>
+            <button id="btn-activate" class="primary" title="Saves, then makes the viewer use this table">Save &amp; set active</button>
+            <button id="btn-deactivate" hidden>Deactivate</button>
         </div>
     </section>
 
-    <section id="drop" class="drop" tabindex="0">
-        <p><strong>Drop PDF files here</strong> or</p>
-        <button id="btn-add" class="primary">Choose PDFs&hellip;</button>
-        <p class="hint">Drag rows to reorder. Page range examples: <code>1-3,5</code> &middot; <code>4-</code> &middot; empty = all pages.</p>
+    <section class="folderbar">
+        <label class="field grow">PDF folder (on this Mac)
+            <input id="folder-path" type="text" placeholder="/Users/you/Music/Setlist" spellcheck="false" autocapitalize="off" autocorrect="off">
+        </label>
+        <div class="buttons">
+            <button id="btn-load-folder">Load folder</button>
+            <button id="btn-browse">Browse&hellip;</button>
+        </div>
     </section>
+    <div id="folder-status" class="hint"></div>
 
     <div id="notice" class="notice" hidden></div>
 
-    <ol id="list" class="list"></ol>
-    <p id="empty" class="empty">No PDFs yet.</p>
+    <section class="tablebar">
+        <button id="btn-add-row" class="primary">+ Add row</button>
+        <button id="btn-sort">Sort by PC</button>
+        <span class="sep"></span>
+        <label class="inline">Auto-fill all pages of
+            <select id="fill-song"></select>
+        </label>
+        <label class="inline">from PC
+            <input id="fill-start" type="number" min="0" max="127" value="0">
+        </label>
+        <button id="btn-fill">Add rows</button>
+    </section>
 
-    <footer class="exportbar">
-        <div id="summary">0 files &middot; 0 pages</div>
-        <button id="btn-export" class="primary big" disabled>Export merged PDF</button>
-    </footer>
+    <table id="table">
+        <thead><tr><th class="c-thumb"></th><th class="c-pc">Program Change (0&ndash;127)</th><th>Song (PDF)</th><th class="c-page">Page</th><th class="c-actions"></th></tr></thead>
+        <tbody id="rows"></tbody>
+    </table>
+    <p id="empty" class="empty">No rows yet. Choose a folder, then add rows or use auto-fill.</p>
+    <p class="hint">Each row: when the viewer receives that Program Change, it opens that PDF at that page. A song can appear in many rows. Test sends the number through the server, exactly like MIDI (needs the project to be active and saved).</p>
 </main>
 
 <div id="dialog" class="dialog" hidden>
     <div class="box">
-        <h2>Open from Mac</h2>
-        <ul id="project-list"></ul>
-        <button id="dialog-close">Close</button>
+        <h2 id="dialog-title"></h2>
+        <div id="dialog-body"></div>
+        <div class="dialog-actions"><button id="dialog-close">Close</button><button id="dialog-ok" class="primary" hidden>Use this folder</button></div>
     </div>
 </div>
-
-<input id="file-pdf" type="file" accept="application/pdf,.pdf" multiple hidden>
 <input id="file-pdset" type="file" accept=".pdset,application/json" hidden>
-<script src="core.js"></script>
 <script src="composer.js"></script>
 </body>
 </html>

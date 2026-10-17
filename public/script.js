@@ -63,6 +63,7 @@ function renderPage(num) {
             if (indicator) {
                 indicator.innerText = `${pageNum} / ${pdfDoc.numPages}`;
             }
+            updateSongInfo();
         });
     });
 }
@@ -126,6 +127,134 @@ mainLoadBtn.addEventListener('click', () => {
 // Socket Listeners
 socket.on('connect', () => {
     console.log('Socket Connected! ID: ' + socket.id);
+});
+
+/**
+ * Project mode (Composer): the server maps MIDI Program Change -> song (PDF) + page.
+ * Without an active project none of this runs and the code above behaves as before.
+ */
+const songInfoEl = document.getElementById('song-info');
+const noticeEl = document.getElementById('notice');
+let projectActive = false;
+let projectName = '';
+let projectRev = 0;
+let currentSong = null;      // song file name currently shown (project mode)
+let currentPc = null;
+let lastSeq = -1;
+let loadToken = 0;
+const docCache = {};         // song -> Promise<pdfDoc>
+let noticeTimer = null;
+
+function showNotice(text, ms) {
+    noticeEl.innerText = text;
+    noticeEl.style.display = 'block';
+    clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(function () { noticeEl.style.display = 'none'; }, ms || 3000);
+}
+
+function updateSongInfo() {
+    if (!projectActive || !currentSong) { songInfoEl.style.display = 'none'; return; }
+    const pages = pdfDoc ? ' / ' + pdfDoc.numPages : '';
+    songInfoEl.innerText = (currentPc !== null ? 'PC ' + currentPc + '  \u00b7  ' : '') +
+        currentSong.replace(/\.pdf$/i, '') + '  \u00b7  p. ' + pageNum + pages;
+    songInfoEl.style.display = 'block';
+}
+
+function songUrl(song) {
+    return '/api/composer/active/pdf/' + encodeURIComponent(song) + '?v=' + projectRev;
+}
+
+function getSongDoc(song) {
+    if (!docCache[song]) {
+        const p = pdfjsLib.getDocument(songUrl(song)).promise;
+        docCache[song] = p;
+        p.catch(function () { if (docCache[song] === p) delete docCache[song]; });
+    }
+    return docCache[song];
+}
+
+function preloadSongs(songs) {
+    // quietly warm the cache one by one so later song changes are instant
+    let i = 0;
+    (function next() {
+        if (i >= songs.length) return;
+        const song = songs[i++];
+        getSongDoc(song).then(next, next);
+    })();
+}
+
+function applySelection(sel) {
+    const song = sel.song;
+    const token = ++loadToken;
+    lastSeq = sel.seq;
+    function showPage(doc) {
+        pdfDoc = doc;
+        currentSong = song;
+        currentPc = sel.pc;
+        let page = sel.page;
+        if (page > doc.numPages) {
+            showNotice('Page ' + page + ' is beyond the end of ' + song + ' (' + doc.numPages + ' pages) - showing the last page', 4000);
+            page = doc.numPages;
+        }
+        pageNum = page;
+        filenameDisplay.innerText = song;
+        hideEmptyState();
+        queueRenderPage(pageNum);
+    }
+    if (currentSong === song && pdfDoc) {
+        // same song: instant page jump
+        currentPc = sel.pc;
+        showPage(pdfDoc);
+        return;
+    }
+    const cached = docCache[song];
+    if (!cached) {
+        loadingMessage.style.display = 'block';
+        loadingMessage.innerText = 'Loading ' + song + '...';
+    }
+    getSongDoc(song).then(function (doc) {
+        if (token !== loadToken) return; // a newer selection arrived
+        showPage(doc);
+    }, function (err) {
+        if (token !== loadToken) return;
+        loadingMessage.style.display = 'none';
+        console.error('Song load failed', song, err);
+        showNotice('Cannot open "' + song + '" - file missing or unreadable', 5000);
+    });
+}
+
+socket.on('project_state', function (st) {
+    if (!st || !st.active) {
+        if (projectActive) { projectActive = false; currentSong = null; updateSongInfo(); }
+        projectActive = false;
+        projectName = '';
+        return;
+    }
+    const changed = !projectActive || st.rev !== projectRev;
+    projectActive = true;
+    projectName = st.name;
+    if (changed) {
+        projectRev = st.rev;
+        Object.keys(docCache).forEach(function (k) { delete docCache[k]; });
+        currentSong = null;
+        lastSeq = -1;
+        if (!pdfDoc) {
+            const p = emptyState.querySelector('p');
+            if (p) p.innerText = 'Project "' + st.name + '" is active - waiting for a Program Change';
+        }
+    }
+    if (st.current && st.current.seq !== lastSeq) applySelection(st.current);
+    if (changed) setTimeout(function () { preloadSongs(st.songs || []); }, 300);
+});
+
+socket.on('song_select', function (sel) {
+    if (!projectActive) return;
+    console.log('Event: song_select -> PC ' + sel.pc + ' ' + sel.song + ' p' + sel.page);
+    applySelection(sel);
+});
+
+socket.on('pc_unknown', function (d) {
+    showNotice('Program Change ' + d.pc + ' is not in project "' + projectName + '"', 3000);
 });
 
 socket.on('page_change', function (data) {
@@ -238,6 +367,8 @@ pdfUploadInput.addEventListener('change', (e) => {
             // Unload current PDF if any (optional, but good practice if we were tracking more state)
             pdfDoc = null;
             pageNum = 1;
+            currentSong = null; // manually loaded file: not a project song
+            updateSongInfo();
             document.getElementById('loading-message').style.display = 'block';
             document.getElementById('loading-message').innerText = `Loading ${file.name}...`;
             canvas.style.display = 'none';

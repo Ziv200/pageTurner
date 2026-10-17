@@ -1,394 +1,361 @@
 (function () {
     'use strict';
-    var C = window.ComposerCore;
-    var PDFLib = window.PDFLib;
     pdfjsLib.GlobalWorkerOptions.workerSrc = '../vendor/pdf.worker.min.js';
-
-    var items = [];          // see makeItem
-    var dirty = false;
-    var dragId = null;
-
+    var API = '/api/composer';
     var $ = function (id) { return document.getElementById(id); };
-    var listEl = $('list'), nameEl = $('project-name'), noticeEl = $('notice');
 
-    function makeItem(o) {
-        return Object.assign({
-            id: C.newId(), fileName: '', size: 0, lastModified: 0, pageRange: '', path: null,
-            blob: null, pageCount: 0, status: 'missing', message: '', thumb: null, storedIn: null
-        }, o);
-    }
+    var state = { folder: '', files: null, folderError: '', rows: [], nextId: 1 };
+    var projectActiveName = null;   // name of project active on server
+    var savedName = null;           // name it was last saved as
+    var dirty = false;              // table changed since last save
+    var tbody = $('rows');
 
+    function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+    function markDirty() { dirty = true; }
+    window.addEventListener('beforeunload', function (e) { if (dirty && state.rows.length) { e.preventDefault(); e.returnValue = ''; } });
+
+    var noticeEl = $('notice');
     function notice(msg, kind) {
         if (!msg) { noticeEl.hidden = true; return; }
-        noticeEl.textContent = msg;
-        noticeEl.className = 'notice' + (kind ? ' ' + kind : '');
-        noticeEl.hidden = false;
+        noticeEl.textContent = msg; noticeEl.className = 'notice' + (kind ? ' ' + kind : ''); noticeEl.hidden = false;
     }
-    function markDirty() { dirty = true; }
-    window.addEventListener('beforeunload', function (e) {
-        if (dirty && items.length) { e.preventDefault(); e.returnValue = ''; }
-    });
-
-    // ---------- loading PDFs ----------
-    function readBlob(blob) {
-        return new Promise(function (res, rej) {
-            var r = new FileReader();
-            r.onload = function () { res(r.result); };
-            r.onerror = function () { rej(r.error || new Error('Cannot read file')); };
-            r.readAsArrayBuffer(blob);
+    function api(path, opts) {
+        return fetch(API + path, opts).then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (j) {
+                if (!r.ok) throw new Error(j.error || ('Request failed (' + r.status + ')'));
+                return j;
+            });
         });
     }
+    function jsonOpts(method, body) { return { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }; }
 
-    // Attach a file/blob to an item: validate with pdf-lib, thumbnail with pdfjs.
-    async function attach(item, blob) {
-        item.blob = blob;
-        item.thumb = null;
-        try {
-            var buf = await readBlob(blob);
-            var doc;
-            try {
-                doc = await PDFLib.PDFDocument.load(buf, { updateMetadata: false });
-            } catch (e) {
-                if (e && /encrypt/i.test(e.name + ' ' + e.message)) throw new Error('Password-protected PDF – remove the password first');
-                throw new Error('Damaged or unreadable PDF');
-            }
-            try { item.pageCount = doc.getPageCount(); } catch (e) { throw new Error('Damaged or unreadable PDF'); }
-            if (!item.pageCount) throw new Error('PDF has no pages');
-            item.status = 'ok';
-            item.message = '';
-            try { item.thumb = await makeThumb(buf); } catch (e) { console.warn('thumbnail failed', e); item.thumb = null; }
-        } catch (e) {
-            item.status = 'error';
-            item.pageCount = 0;
-            item.message = e.message;
-        }
+    // ---------- rows ----------
+    function newRow(o) { return Object.assign({ id: state.nextId++, pc: '', song: '', page: '1' }, o); }
+    function fileInfo(song) {
+        if (!state.files) return null;
+        for (var i = 0; i < state.files.length; i++) if (state.files[i].name === song) return state.files[i];
+        return null;
     }
+    function toInt(v) { return /^\s*\d+\s*$/.test(String(v)) ? parseInt(v, 10) : NaN; }
 
-    async function makeThumb(buf) {
-        var pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf.slice(0)) }).promise;
-        try {
-            var page = await pdf.getPage(1);
-            var vp0 = page.getViewport({ scale: 1 });
-            var scale = 168 / vp0.height;
-            var vp = page.getViewport({ scale: scale });
-            var canvas = document.createElement('canvas');
-            canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
-            await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
-            return canvas.toDataURL('image/jpeg', 0.7);
-        } finally { pdf.destroy(); }
-    }
-
-    async function addFiles(fileList) {
-        var files = Array.prototype.slice.call(fileList).filter(function (f) {
-            return /\.pdf$/i.test(f.name) || f.type === 'application/pdf';
-        });
-        var skipped = fileList.length - files.length;
-        if (!files.length) { notice('No PDF files found in that selection.', 'error'); return; }
-        var matched = 0, changed = 0;
-        for (var i = 0; i < files.length; i++) {
-            var f = files[i];
-            var waiting = items.filter(function (it) { return it.status === 'missing' || it.status === 'changed'; });
-            var m = C.matchMissing(f, waiting.filter(function (w) { return !w.blob; }));
-            var item;
-            if (m) {
-                item = m.item; matched++;
-                await attach(item, f);
-                if (item.status === 'ok' && m.changed) {
-                    item.status = 'changed';
-                    item.message = 'This file is not the same size as when the project was saved. Check it.';
-                    changed++;
+    // returns per-row {level:'ok'|'warn'|'bad', msg, pcErr, songErr, pageErr}; fatal = problems that block saving
+    function validate() {
+        var counts = {};
+        state.rows.forEach(function (r) { var n = toInt(r.pc); if (!isNaN(n)) counts[n] = (counts[n] || 0) + 1; });
+        var out = {}; var fatal = 0;
+        state.rows.forEach(function (r) {
+            var v = { level: 'ok', msg: '' };
+            var pc = toInt(r.pc), pg = toInt(r.page);
+            function bad(m, f) { v.level = 'bad'; v.msg = v.msg || m; if (f) v[f] = true; }
+            if (isNaN(pc) || pc < 0 || pc > 127) { bad('Program Change must be a whole number 0-127', 'pcErr'); fatal++; }
+            else if (counts[pc] > 1) { bad('Duplicate Program Change ' + pc + ' - each number can be used once', 'pcErr'); fatal++; }
+            if (!r.song) { bad('Choose a song', 'songErr'); fatal++; }
+            if (isNaN(pg) || pg < 1) { bad('Page must be a whole number, 1 or more', 'pageErr'); fatal++; }
+            if (r.song) {
+                var fi = fileInfo(r.song);
+                if (state.folderError) bad(state.folderError, 'songErr');
+                else if (state.files && !fi) bad('File not found in the folder: ' + r.song, 'songErr');
+                else if (fi && fi.error) bad(r.song + ' is damaged or unreadable', 'songErr');
+                else if (fi && !isNaN(pg) && pg > fi.pages) {
+                    if (v.level === 'ok') v.level = 'warn';
+                    v.msg = v.msg || 'Only ' + fi.pages + ' page' + (fi.pages === 1 ? '' : 's') + ' in this PDF'; v.pageErr = true;
                 }
-            } else {
-                item = makeItem({ fileName: f.name, size: f.size, lastModified: f.lastModified });
-                items.push(item);
-                await attach(item, f);
             }
-            item.size = f.size; item.lastModified = f.lastModified;
-            render();
+            out[r.id] = v;
+        });
+        out.fatal = fatal;
+        return out;
+    }
+
+    // ---------- thumbnails ----------
+    var docs = {}, thumbs = {}, thumbQueue = [], thumbBusy = false;
+    function pdfUrl(song) { return API + '/pdf?folder=' + encodeURIComponent(state.folder) + '&name=' + encodeURIComponent(song); }
+    function thumbKey(song, page) { return state.folder + '|' + song + '|' + page; }
+    function queueThumb(song, page, box) {
+        thumbQueue.push({ song: song, page: page, box: box, folder: state.folder });
+        if (!thumbBusy) runThumbs();
+    }
+    function runThumbs() {
+        var job = thumbQueue.shift();
+        if (!job) { thumbBusy = false; return; }
+        thumbBusy = true;
+        var key = thumbKey(job.song, job.page);
+        function done(url) {
+            if (url && job.box.isConnected) { var img = new Image(); img.src = url; job.box.textContent = ''; job.box.appendChild(img); }
+            runThumbs();
         }
-        markDirty();
-        var msg = [];
-        if (matched) msg.push(matched + ' matched to the project');
-        if (changed) msg.push(changed + ' differ in size from the saved one');
-        if (skipped) msg.push(skipped + ' non-PDF skipped');
-        notice(msg.join(' · '), changed || skipped ? '' : 'ok');
-        if (!msg.length) notice('');
+        if (job.folder !== state.folder) return done(null);
+        if (thumbs[key]) return done(thumbs[key]);
+        var dk = job.folder + '|' + job.song;
+        if (!docs[dk]) docs[dk] = pdfjsLib.getDocument(pdfUrl(job.song)).promise;
+        docs[dk].then(function (doc) {
+            if (job.page > doc.numPages) return null;
+            return doc.getPage(job.page).then(function (pg) {
+                var vp0 = pg.getViewport({ scale: 1 });
+                var sc = 120 / vp0.height;
+                var vp = pg.getViewport({ scale: sc });
+                var c = document.createElement('canvas'); c.width = Math.ceil(vp.width); c.height = Math.ceil(vp.height);
+                return pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise.then(function () { return c.toDataURL('image/png'); });
+            });
+        }).then(function (url) { if (url) thumbs[key] = url; done(url); }, function () { delete docs[dk]; job.box.textContent = '?'; runThumbs(); });
     }
 
     // ---------- rendering ----------
-    function rangeCheck(it) {
-        if (it.status !== 'ok' && it.status !== 'changed') return { ok: true, count: 0 };
-        try { return { ok: true, count: C.parseRange(it.pageRange, it.pageCount).length }; }
-        catch (e) { return { ok: false, error: e.message, count: 0 }; }
+    var rowEls = {};
+    function songSelect(r) {
+        var sel = el('select');
+        var names = state.files ? state.files.map(function (f) { return f.name; }) : [];
+        var blank = el('option', '', state.files ? '— choose song —' : '— load a folder first —'); blank.value = ''; sel.appendChild(blank);
+        names.forEach(function (n) { var o = el('option', '', n); o.value = n; sel.appendChild(o); });
+        if (r.song && names.indexOf(r.song) < 0) { var o = el('option', '', r.song + '  (missing)'); o.value = r.song; sel.appendChild(o); }
+        sel.value = r.song;
+        sel.addEventListener('change', function () { r.song = sel.value; markDirty(); refresh(); });
+        return sel;
     }
-
-    function render() {
-        listEl.textContent = '';
-        var totalPages = 0, problems = 0;
-        items.forEach(function (it, idx) {
-            var rc = rangeCheck(it);
-            var usable = it.blob && (it.status === 'ok' || it.status === 'changed');
-            if (!usable || !rc.ok) problems++;
-            else totalPages += rc.count;
-
-            var li = document.createElement('li');
-            li.className = 'row' + (it.status === 'error' ? ' bad' : (it.status === 'missing' || it.status === 'changed') ? ' missing' : '');
-            li.dataset.id = it.id;
-
-            var handle = el('div', 'handle', '⠿'); handle.title = 'Drag to reorder'; handle.draggable = true;
-            handle.addEventListener('dragstart', function (e) {
-                dragId = it.id; li.classList.add('dragging');
-                e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData('text/x-composer-row', it.id);
-                try { e.dataTransfer.setDragImage(li, 20, 20); } catch (_) {}
-            });
-            handle.addEventListener('dragend', function () { dragId = null; clearDropMarks(); li.classList.remove('dragging'); });
-            li.addEventListener('dragover', function (e) {
-                if (!dragId) return;
-                e.preventDefault(); e.stopPropagation();
-                var r = li.getBoundingClientRect();
-                clearDropMarks();
-                li.classList.add(e.clientY < r.top + r.height / 2 ? 'dropbefore' : 'dropafter');
-            });
-            li.addEventListener('drop', function (e) {
-                if (!dragId) return;
-                e.preventDefault(); e.stopPropagation();
-                var after = li.classList.contains('dropafter');
-                moveTo(dragId, it.id, after);
-                dragId = null; clearDropMarks();
-            });
-
-            var thumb = el('div', 'thumb');
-            if (it.thumb) { var img = new Image(); img.src = it.thumb; img.alt = ''; thumb.appendChild(img); }
-            else thumb.textContent = it.status === 'error' ? 'error' : it.status === 'missing' ? 'missing' : 'PDF';
-
-            var info = el('div', 'info');
-            var nm = el('div', 'name', it.fileName); nm.title = it.fileName; nm.dir = 'auto';
-            var meta = el('div', 'meta');
-            if (it.status === 'error') meta.appendChild(el('span', 'err', it.message));
-            else if (it.status === 'missing') meta.appendChild(el('span', 'warn', 'File not attached – drop or choose "' + it.fileName + '"' + (it.path ? ' (was: ' + it.path + ')' : '')));
-            else {
-                var txt = it.pageCount + ' page' + (it.pageCount === 1 ? '' : 's') + ' · ' + fmtSize(it.size);
-                if (rc.ok && it.pageRange.trim()) txt += ' · using ' + rc.count;
-                meta.appendChild(document.createTextNode(txt));
-                if (it.status === 'changed') { meta.appendChild(document.createElement('br')); meta.appendChild(el('span', 'warn', it.message)); }
-            }
-            info.appendChild(nm); info.appendChild(meta);
-
-            if (usable) {
-                var range = el('div', 'range');
-                range.appendChild(document.createTextNode('Pages:'));
-                var inp = document.createElement('input');
-                inp.type = 'text'; inp.placeholder = 'all (e.g. 1-3,5)'; inp.value = it.pageRange; inp.setAttribute('inputmode', 'text');
-                inp.setAttribute('aria-label', 'Page range for ' + it.fileName);
-                if (!rc.ok) inp.classList.add('invalid');
-                inp.addEventListener('input', function () {
-                    it.pageRange = inp.value; markDirty();
-                    var r2 = rangeCheck(it);
-                    inp.classList.toggle('invalid', !r2.ok);
-                    errSpan.textContent = r2.ok ? '' : r2.error;
-                    updateSummary();
-                });
-                var errSpan = el('span', 'err', rc.ok ? '' : rc.error);
-                range.appendChild(inp); range.appendChild(errSpan);
-                info.appendChild(range);
-            }
-
-            var actions = el('div', 'actions');
-            actions.appendChild(btn('▲', 'Move up', idx === 0, function () { move(idx, -1); }));
-            actions.appendChild(btn('▼', 'Move down', idx === items.length - 1, function () { move(idx, 1); }));
-            actions.appendChild(btn('✕', 'Remove', false, function () { items.splice(idx, 1); markDirty(); render(); }));
-
-            li.appendChild(handle); li.appendChild(thumb); li.appendChild(info); li.appendChild(actions);
-            listEl.appendChild(li);
+    function buildRow(r) {
+        var tr = el('tr'); tr.dataset.id = r.id;
+        var tdT = el('td', 'c-thumb'); var th = el('div', 'thumb'); tdT.appendChild(th); tr.appendChild(tdT);
+        var tdPc = el('td', 'c-pc'); var pc = el('input', 'pcin'); pc.type = 'number'; pc.min = 0; pc.max = 127; pc.step = 1; pc.value = r.pc; pc.setAttribute('aria-label', 'Program Change');
+        pc.addEventListener('input', function () { r.pc = pc.value; markDirty(); refresh(true); }); tdPc.appendChild(pc); tr.appendChild(tdPc);
+        var tdS = el('td', 'c-song'); tdS.appendChild(songSelect(r)); tdS.appendChild(el('div', 'msg')); tr.appendChild(tdS);
+        var tdG = el('td', 'c-page'); var pg = el('input', 'pgin'); pg.type = 'number'; pg.min = 1; pg.step = 1; pg.value = r.page; pg.setAttribute('aria-label', 'Page');
+        pg.addEventListener('input', function () { r.page = pg.value; markDirty(); refresh(true); });
+        tdG.appendChild(pg); var of = el('span', 'hint', ''); of.className = 'hint pageof'; tdG.appendChild(of); tr.appendChild(tdG);
+        var tdA = el('td', 'c-actions');
+        var test = el('button', 'small', 'Test'); test.title = 'Simulate this Program Change on the server'; test.addEventListener('click', function () { testPc(r); });
+        var dup = el('button', 'small', 'Duplicate'); dup.addEventListener('click', function () {
+            var i = state.rows.indexOf(r); state.rows.splice(i + 1, 0, newRow({ pc: '', song: r.song, page: r.page })); markDirty(); rebuild();
         });
-        $('empty').hidden = items.length > 0;
-        render.problems = problems; render.totalPages = totalPages;
-        updateSummary();
+        var del = el('button', 'small', '✕'); del.title = 'Remove row'; del.addEventListener('click', function () { state.rows.splice(state.rows.indexOf(r), 1); markDirty(); rebuild(); });
+        tdA.appendChild(test); tdA.appendChild(dup); tdA.appendChild(del); tr.appendChild(tdA);
+        rowEls[r.id] = { tr: tr, thumb: th, thumbFor: null, pc: pc, pg: pg, msg: tdS.querySelector('.msg'), pageof: of };
+        return tr;
     }
-
-    function updateSummary() {
-        var total = 0, problems = 0;
-        items.forEach(function (it) {
-            var rc = rangeCheck(it);
-            var usable = it.blob && (it.status === 'ok' || it.status === 'changed');
-            if (!usable || !rc.ok) problems++; else total += rc.count;
-        });
-        var s = items.length + ' file' + (items.length === 1 ? '' : 's') + ' · ' + total + ' page' + (total === 1 ? '' : 's');
-        if (problems) s += ' · ' + problems + ' need attention';
-        $('summary').textContent = s;
-        $('btn-export').disabled = !items.length || problems > 0 || total === 0;
-        $('btn-export').title = problems ? 'Fix or remove the files that need attention first' : '';
+    function rebuild() {
+        tbody.textContent = ''; rowEls = {};
+        state.rows.forEach(function (r) { tbody.appendChild(buildRow(r)); });
+        $('empty').hidden = state.rows.length > 0;
+        refresh();
     }
-
-    function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
-    function btn(label, title, disabled, fn) { var b = el('button', '', label); b.title = title; b.setAttribute('aria-label', title); b.disabled = disabled; b.addEventListener('click', fn); return b; }
-    function fmtSize(n) { return n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
-    function clearDropMarks() { listEl.querySelectorAll('.dropbefore,.dropafter').forEach(function (x) { x.classList.remove('dropbefore', 'dropafter'); }); }
-
-    function move(idx, d) {
-        var j = idx + d; if (j < 0 || j >= items.length) return;
-        var t = items[idx]; items[idx] = items[j]; items[j] = t; markDirty(); render();
-    }
-    function moveTo(srcId, targetId, after) {
-        if (srcId === targetId) return;
-        var si = items.findIndex(function (x) { return x.id === srcId; });
-        var it = items.splice(si, 1)[0];
-        var ti = items.findIndex(function (x) { return x.id === targetId; });
-        items.splice(after ? ti + 1 : ti, 0, it);
-        markDirty(); render();
-    }
-
-    // ---------- drop zone ----------
-    var drop = $('drop');
-    ['dragenter', 'dragover'].forEach(function (ev) {
-        document.addEventListener(ev, function (e) {
-            if (dragId || !e.dataTransfer || Array.prototype.indexOf.call(e.dataTransfer.types, 'Files') < 0) return;
-            e.preventDefault(); drop.classList.add('over');
-        });
-    });
-    ['dragleave', 'drop'].forEach(function (ev) {
-        document.addEventListener(ev, function (e) { if (ev === 'drop' || e.target === document.documentElement || e.relatedTarget === null) drop.classList.remove('over'); });
-    });
-    document.addEventListener('drop', function (e) {
-        if (dragId || !e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
-        e.preventDefault();
-        addFiles(e.dataTransfer.files);
-    });
-    $('btn-add').addEventListener('click', function () { $('file-pdf').click(); });
-    $('file-pdf').addEventListener('change', function (e) { var f = e.target.files; if (f.length) addFiles(f); e.target.value = ''; });
-
-    // ---------- project: new / save / open ----------
-    function projectName() { return nameEl.value.trim() || 'Untitled'; }
-    nameEl.addEventListener('input', markDirty);
-
-    $('btn-new').addEventListener('click', function () {
-        if (dirty && items.length && !confirm('Discard the current project?')) return;
-        items = []; nameEl.value = 'Untitled'; dirty = false; notice(''); render();
-    });
-
-    function download(blob, filename) {
-        var a = document.createElement('a');
-        a.href = URL.createObjectURL(blob); a.download = filename;
-        document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
-    }
-
-    $('btn-save-file').addEventListener('click', function () {
-        var data = C.buildPdset(projectName(), items, null);
-        data.items.forEach(function (d, i) { d.path = items[i].path || null; });
-        download(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), C.safeFileBase(projectName()) + '.pdset');
-        dirty = false;
-        notice('Saved a .pdset file. It stores names and order only – keep the PDFs, or use "Save to Mac" to keep copies with the project.', '');
-    });
-
-    $('btn-open-file').addEventListener('click', function () { $('file-pdset').click(); });
-    $('file-pdset').addEventListener('change', async function (e) {
-        var f = e.target.files[0]; e.target.value = ''; if (!f) return;
-        try { loadProject(JSON.parse(await f.text()), null); }
-        catch (err) { notice('Cannot open project: ' + err.message, 'error'); }
-    });
-
-    async function loadProject(data, storedProject) {
-        var p = C.readPdset(data);
-        items = p.items.map(function (d) {
-            return makeItem({ id: d.id || C.newId(), fileName: String(d.fileName || 'unnamed.pdf'), size: d.size || 0, lastModified: d.lastModified || 0, pageRange: d.pageRange || '', path: d.path || null, status: 'missing' });
-        });
-        nameEl.value = p.name; render();
-        if (storedProject) {
-            var failed = 0;
-            for (var i = 0; i < items.length; i++) {
-                try {
-                    var r = await fetch('/api/composer/projects/' + encodeURIComponent(storedProject) + '/files/' + items[i].id);
-                    if (!r.ok) throw new Error('missing');
-                    await attach(items[i], await r.blob());
-                    items[i].storedIn = storedProject;
-                } catch (e) { failed++; }
-                render();
+    // update classes/messages/thumbs in place (keeps focus while typing)
+    function refresh(keepFocus) {
+        var v = validate();
+        state.rows.forEach(function (r) {
+            var e = rowEls[r.id]; if (!e) return;
+            var x = v[r.id];
+            e.tr.className = x.level === 'ok' ? '' : x.level;
+            e.pc.classList.toggle('err', !!x.pcErr);
+            e.pg.classList.toggle('err', !!x.pageErr);
+            e.tr.querySelector('select').classList.toggle('err', !!x.songErr);
+            e.msg.textContent = x.msg;
+            var fi = r.song ? fileInfo(r.song) : null;
+            e.pageof.textContent = fi && !fi.error ? ' of ' + fi.pages : '';
+            var pg = toInt(r.page);
+            var want = (fi && !fi.error && !isNaN(pg) && pg >= 1 && pg <= fi.pages) ? r.song + '|' + pg : '';
+            if (want !== e.thumbFor) {
+                e.thumbFor = want; e.thumb.textContent = '';
+                if (want) {
+                    if (thumbs[thumbKey(r.song, pg)]) { var img = new Image(); img.src = thumbs[thumbKey(r.song, pg)]; e.thumb.appendChild(img); }
+                    else queueThumb(r.song, pg, e.thumb);
+                }
             }
-            notice(failed ? failed + ' stored file(s) could not be loaded – drop the PDFs to re-attach them.' : 'Project opened from Mac.', failed ? 'error' : 'ok');
-        } else {
-            notice('Project opened. Drop or choose the PDFs again – files are matched by name and size.', '');
-        }
-        dirty = false;
+        });
+        // auto-fill song list
+        var fs = $('fill-song'), cur = fs.value; fs.textContent = '';
+        (state.files || []).forEach(function (f) { var o = el('option', '', f.name + (f.error ? '' : ' (' + f.pages + ')')); o.value = f.name; fs.appendChild(o); });
+        if (cur) fs.value = cur;
+        $('empty').hidden = state.rows.length > 0;
+        $('btn-activate').disabled = false;
+        $('btn-save-mac').disabled = false;
+        return v;
     }
 
-    $('btn-save-mac').addEventListener('click', async function () {
-        var name = projectName();
-        var bad = items.filter(function (it) { return !it.blob; });
-        if (bad.length) { notice('Attach the missing PDFs before saving to the Mac (or use "Download .pdset").', 'error'); return; }
-        var b = $('btn-save-mac'); b.disabled = true;
-        try {
-            for (var i = 0; i < items.length; i++) {
-                var it = items[i];
-                if (it.status === 'error') continue;
-                if (it.storedIn === name) continue;
-                notice('Saving ' + (i + 1) + ' of ' + items.length + '…');
-                var r = await fetch('/api/composer/projects/' + encodeURIComponent(name) + '/files/' + it.id, { method: 'PUT', body: it.blob });
-                if (!r.ok) throw new Error((await r.json().catch(function () { return {}; })).error || 'Upload failed');
-            }
-            var kept = items.filter(function (it) { return it.status !== 'error'; });
-            var folderRes = await fetch('/api/composer/projects');
-            var folder = (await folderRes.json()).root + '/' + name;
-            var data = C.buildPdset(name, kept, folder);
-            var pr = await fetch('/api/composer/projects/' + encodeURIComponent(name), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-            if (!pr.ok) throw new Error((await pr.json().catch(function () { return {}; })).error || 'Save failed');
-            kept.forEach(function (it) { it.storedIn = name; it.path = folder + '/files/' + it.id + '.pdf'; });
-            dirty = false;
-            notice('Saved to ' + folder + (kept.length < items.length ? ' (files with errors were left out)' : ''), 'ok');
-        } catch (e) { notice('Save failed: ' + e.message, 'error'); }
-        b.disabled = false;
-    });
+    // ---------- folder ----------
+    function loadFolder(p, quiet) {
+        state.folderError = ''; $('folder-status').textContent = 'Reading folder…';
+        docs = {}; thumbs = {}; thumbQueue = [];
+        return api('/folder?path=' + encodeURIComponent(p)).then(function (j) {
+            state.folder = j.path; state.files = j.files; $('folder-path').value = j.path;
+            var ok = j.files.filter(function (f) { return !f.error; }).length;
+            $('folder-status').textContent = j.files.length + ' PDF' + (j.files.length === 1 ? '' : 's') + ' found' + (ok < j.files.length ? ' (' + (j.files.length - ok) + ' unreadable)' : '');
+            if (!j.files.length) notice('This folder has no PDF files.', '');
+            else if (!quiet) notice('');
+            rebuild();
+        }, function (e) {
+            state.folder = p; state.files = []; state.folderError = 'Folder problem: ' + e.message;
+            $('folder-status').textContent = state.folderError;
+            notice(state.folderError, 'error');
+            rebuild();
+        });
+    }
+    $('btn-load-folder').addEventListener('click', function () { var p = $('folder-path').value.trim(); if (p) { markDirty(); loadFolder(p); } });
+    $('folder-path').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('btn-load-folder').click(); });
 
+    // ---------- dialogs ----------
     var dialog = $('dialog');
-    $('dialog-close').addEventListener('click', function () { dialog.hidden = true; });
-    $('btn-open-mac').addEventListener('click', async function () {
-        var ul = $('project-list'); ul.textContent = '';
-        try {
-            var r = await (await fetch('/api/composer/projects')).json();
-            if (!r.projects.length) ul.appendChild(el('li', 'hint', 'No saved projects yet in ' + r.root));
-            r.projects.forEach(function (p) {
-                var li = document.createElement('li');
-                var b = el('button', '', p.name + '  –  ' + new Date(p.modified).toLocaleString());
-                b.addEventListener('click', async function () {
-                    if (dirty && items.length && !confirm('Discard the current project?')) return;
-                    dialog.hidden = true;
-                    try {
-                        var d = await (await fetch('/api/composer/projects/' + encodeURIComponent(p.name))).json();
-                        await loadProject(d, p.name);
-                    } catch (e) { notice('Cannot open project: ' + e.message, 'error'); }
-                });
-                li.appendChild(b); ul.appendChild(li);
-            });
-        } catch (e) { ul.appendChild(el('li', 'hint', 'Could not list projects: ' + e.message)); }
+    function openDialog(title, okLabel) {
+        $('dialog-title').textContent = title; $('dialog-body').textContent = '';
+        var ok = $('dialog-ok'); ok.hidden = !okLabel; if (okLabel) ok.textContent = okLabel;
         dialog.hidden = false;
-    });
-
-    // ---------- export ----------
-    async function buildMerged() {
-        var out = await PDFLib.PDFDocument.create();
-        for (var i = 0; i < items.length; i++) {
-            var it = items[i];
-            var src = await PDFLib.PDFDocument.load(await readBlob(it.blob), { updateMetadata: false });
-            var idx = C.parseRange(it.pageRange, src.getPageCount());
-            var pages = await out.copyPages(src, idx);
-            pages.forEach(function (p) { out.addPage(p); });
-        }
-        return out.save();
     }
-    window.__composerBuildMerged = buildMerged; // for tests
+    $('dialog-close').addEventListener('click', function () { dialog.hidden = true; });
+    var browsePath = null;
+    function browse(p) {
+        api('/browse' + (p ? '?path=' + encodeURIComponent(p) : '')).then(function (j) {
+            browsePath = j.path;
+            var body = $('dialog-body'); body.textContent = '';
+            body.appendChild(el('div', 'cwd', j.path));
+            body.appendChild(el('div', 'hint', j.pdfCount + ' PDF' + (j.pdfCount === 1 ? '' : 's') + ' in this folder'));
+            var bar = el('div', 'buttons');
+            var up = el('button', 'small', '↑ Up'); up.disabled = !j.parent; up.addEventListener('click', function () { browse(j.parent); });
+            var home = el('button', 'small', 'Home'); home.addEventListener('click', function () { browse(j.home); });
+            bar.appendChild(up); bar.appendChild(home); body.appendChild(bar);
+            var ul = el('ul');
+            if (!j.dirs.length) ul.appendChild(el('li', '', '(no sub-folders)'));
+            j.dirs.forEach(function (d) { var li = el('li', '', '📁 ' + d); li.addEventListener('click', function () { browse(j.path.replace(/\/$/, '') + '/' + d); }); ul.appendChild(li); });
+            body.appendChild(ul);
+        }, function (e) { $('dialog-body').textContent = e.message; });
+    }
+    $('btn-browse').addEventListener('click', function () {
+        openDialog('Choose the PDF folder', 'Use this folder'); browse($('folder-path').value.trim() || null);
+    });
+    $('dialog-ok').addEventListener('click', function () { dialog.hidden = true; markDirty(); loadFolder(browsePath); });
 
-    $('btn-export').addEventListener('click', async function () {
-        var b = $('btn-export'); b.disabled = true; var old = b.textContent; b.textContent = 'Merging…';
-        try {
-            var bytes = await buildMerged();
-            download(new Blob([bytes], { type: 'application/pdf' }), C.safeFileBase(projectName()) + '.pdf');
-            notice('Exported ' + C.safeFileBase(projectName()) + '.pdf', 'ok');
-        } catch (e) { notice('Export failed: ' + e.message, 'error'); }
-        b.textContent = old; updateSummary();
+    // ---------- table toolbar ----------
+    $('btn-add-row').addEventListener('click', function () {
+        var used = {}; state.rows.forEach(function (r) { used[r.pc] = 1; });
+        var n = 0; while (used[n] && n < 127) n++;
+        var last = state.rows[state.rows.length - 1];
+        state.rows.push(newRow({ pc: String(n), song: last ? last.song : (state.files && state.files[0] ? state.files[0].name : ''), page: '1' }));
+        markDirty(); rebuild();
+    });
+    $('btn-sort').addEventListener('click', function () {
+        state.rows.sort(function (a, b) { var x = toInt(a.pc), y = toInt(b.pc); return (isNaN(x) ? 999 : x) - (isNaN(y) ? 999 : y); });
+        markDirty(); rebuild();
+    });
+    $('btn-fill').addEventListener('click', function () {
+        var song = $('fill-song').value, fi = fileInfo(song), start = toInt($('fill-start').value);
+        if (!fi || fi.error) return notice('Choose a readable song to auto-fill.', 'error');
+        if (isNaN(start) || start < 0) return notice('Start number must be 0-127.', 'error');
+        if (start + fi.pages - 1 > 127) return notice('Not enough numbers: ' + fi.pages + ' pages from ' + start + ' goes beyond 127. Nothing added.', 'error');
+        for (var p = 1; p <= fi.pages; p++) state.rows.push(newRow({ pc: String(start + p - 1), song: song, page: String(p) }));
+        markDirty(); rebuild();
+        notice('Added ' + fi.pages + ' rows for ' + song + ' (PC ' + start + '–' + (start + fi.pages - 1) + ').' + (hasDup() ? ' Some numbers are already used – see the red rows.' : ''), hasDup() ? '' : 'ok');
+    });
+    function hasDup() { var v = validate(); return state.rows.some(function (r) { return v[r.id].pcErr; }); }
+
+    // ---------- projects ----------
+    var nameEl = $('project-name');
+    function projectName() { return nameEl.value.trim() || 'Untitled'; }
+    function pdset() {
+        return {
+            version: 2, name: projectName(), folder: state.folder,
+            rows: state.rows.map(function (r) { return { pc: toInt(r.pc), song: r.song, page: toInt(r.page) }; })
+        };
+    }
+    function canSave() {
+        var v = validate();
+        if (!state.folder || state.folderError && !state.rows.length) { notice('Choose a PDF folder first.', 'error'); return false; }
+        if (v.fatal) { notice('Fix the red rows first (duplicate or invalid numbers, or no song chosen).', 'error'); return false; }
+        return true;
+    }
+    function saveToMac() {
+        if (!canSave()) return Promise.resolve(false);
+        var name = projectName();
+        return api('/projects/' + encodeURIComponent(name), jsonOpts('PUT', pdset())).then(function (j) {
+            savedName = name; dirty = false;
+            var v = validate(), probs = state.rows.filter(function (r) { return v[r.id].level !== 'ok'; }).length;
+            notice('Saved ' + j.file + (probs ? ' (' + probs + ' row' + (probs === 1 ? '' : 's') + ' have warnings)' : ''), probs ? '' : 'ok');
+            return true;
+        }, function (e) { notice('Save failed: ' + e.message, 'error'); return false; });
+    }
+    $('btn-save-mac').addEventListener('click', saveToMac);
+    $('btn-activate').addEventListener('click', function () {
+        saveToMac().then(function (ok) {
+            if (!ok) return;
+            return api('/active', jsonOpts('POST', { name: projectName() })).then(function () {
+                notice('"' + projectName() + '" is now active in PageTurner. Program Changes select songs from this table.', 'ok'); loadActive();
+            }, function (e) { notice('Could not activate: ' + e.message, 'error'); });
+        });
+    });
+    $('btn-deactivate').addEventListener('click', function () {
+        api('/active', jsonOpts('POST', { name: null })).then(function () { notice('Project deactivated - viewer uses plain Program Change → page.', 'ok'); loadActive(); }, function (e) { notice(e.message, 'error'); });
+    });
+    function loadActive() {
+        return fetch(API + '/active').then(function (r) { return r.json(); }).then(function (a) {
+            projectActiveName = a.active ? a.name : null;
+            var b = $('active-banner');
+            b.textContent = a.active ? 'Active in PageTurner: ' + a.name : 'No active project – viewer uses plain Program Change → page';
+            b.className = 'banner' + (a.active ? ' on' : '');
+            $('btn-deactivate').hidden = !a.active;
+        }).catch(function () {});
+    }
+    function testPc(r) {
+        var pc = toInt(r.pc);
+        if (isNaN(pc)) return notice('Enter a valid Program Change number first.', 'error');
+        if (dirty || projectActiveName !== projectName()) return notice('Test uses the saved, active project. Press "Save & set active" first.', '');
+        api('/test-pc', jsonOpts('POST', { pc: pc })).then(function (j) {
+            notice(j.found ? 'Sent PC ' + pc + ' → ' + j.song + ' page ' + j.page : 'PC ' + pc + ' is not in the active project', j.found ? 'ok' : '');
+        }, function (e) { notice(e.message, 'error'); });
+    }
+    function setProject(p, savedAs) {
+        nameEl.value = p.name || 'Untitled';
+        state.rows = (p.rows || []).map(function (r) { return newRow({ pc: String(r.pc), song: r.song, page: String(r.page) }); });
+        savedName = savedAs || null; dirty = false;
+        if (p.folder) { $('folder-path').value = p.folder; return loadFolder(p.folder, true); }
+        state.folder = ''; state.files = null; rebuild(); return Promise.resolve();
+    }
+    function checkProject(p) {
+        if (!p || p.version !== 2 || !Array.isArray(p.rows)) throw new Error('Not a version 2 .pdset file (older merge-style projects cannot be opened)');
+        return p;
+    }
+    $('btn-new').addEventListener('click', function () {
+        if (dirty && state.rows.length && !confirm('Discard unsaved changes?')) return;
+        state.rows = []; nameEl.value = 'Untitled'; dirty = false; savedName = null; notice(''); rebuild();
+    });
+    $('btn-open-mac').addEventListener('click', function () {
+        openDialog('Open project');
+        api('/projects').then(function (j) {
+            var body = $('dialog-body'); body.textContent = '';
+            body.appendChild(el('div', 'hint', j.root));
+            var ul = el('ul'); if (!j.projects.length) ul.appendChild(el('li', '', 'No saved projects yet'));
+            j.projects.forEach(function (p) {
+                var li = el('li'); li.appendChild(el('span', '', p.name + (p.name === j.active ? '  (active)' : '')));
+                li.appendChild(el('span', 'hint', new Date(p.modified).toLocaleString()));
+                li.addEventListener('click', function () {
+                    if (dirty && state.rows.length && !confirm('Discard unsaved changes?')) return;
+                    api('/projects/' + encodeURIComponent(p.name)).then(function (d) {
+                        checkProject(d); dialog.hidden = true; notice('');
+                        return setProject(d, p.name).then(function () { loadActive(); });
+                    }).catch(function (e) { notice('Cannot open "' + p.name + '": ' + e.message, 'error'); dialog.hidden = true; });
+                });
+                ul.appendChild(li);
+            });
+            body.appendChild(ul);
+        }, function (e) { $('dialog-body').textContent = e.message; });
+    });
+    $('btn-save-file').addEventListener('click', function () {
+        if (!canSave()) return;
+        var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(pdset(), null, 2)], { type: 'application/json' }));
+        a.download = projectName() + '.pdset'; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+    });
+    $('btn-open-file').addEventListener('click', function () { $('file-pdset').click(); });
+    $('file-pdset').addEventListener('change', function (e) {
+        var f = e.target.files[0]; e.target.value = ''; if (!f) return;
+        var rd = new FileReader();
+        rd.onload = function () {
+            try { var d = checkProject(JSON.parse(rd.result)); notice(''); setProject(d, null); markDirty(); }
+            catch (err) { notice('Cannot open file: ' + err.message, 'error'); }
+        };
+        rd.readAsText(f);
     });
 
-    // test hooks (read-only helpers)
-    window.__composer = { get items() { return items; }, addFiles: addFiles };
-    render();
+    // start
+    loadActive();
+    api('/projects').then(function (j) {
+        if (j.active) return api('/projects/' + encodeURIComponent(j.active)).then(function (d) { return setProject(checkProject(d), j.active); });
+    }).catch(function () {});
+    rebuild();
+    window.__composer = { state: state, validate: validate };
 })();

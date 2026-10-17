@@ -13,7 +13,8 @@ const PORT = process.env.PORT || 3000;
 
 // Enable static file serving
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/api/composer', require('./composer-api')());
+const composer = require('./composer-api')(io);
+app.use('/api/composer', composer.router);
 app.get('/composer', (req, res) => res.redirect('/composer/'));
 app.use('/lib', express.static(path.join(__dirname, 'node_modules/pdfjs-dist/build')));
 
@@ -60,12 +61,11 @@ function setMidiPort(portName) {
         currentMidiInputName = targetName;
 
         console.log(`\n✅ Listening to MIDI Input: "${targetName}"`);
-        console.log('   Mapping: MIDI Program Change -> PDF Page Number');
+        console.log('   Mapping: MIDI Program Change -> song + page (active project) or PDF page (no project)');
 
         midiInput.on('program', (msg) => {
-            const pageNumber = msg.number + 1;
-            console.log(`🎛️ MIDI Program Change (Raw: ${msg.number}) -> Jump to Page ${pageNumber}`);
-            io.emit('page_change', { page: pageNumber });
+            // Active project: PC -> song + page lookup. No project: PC -> page (original behaviour).
+            composer.handleProgramChange(msg.number, 'midi');
         });
 
         return true;
@@ -112,6 +112,7 @@ io.on('connection', (socket) => {
     console.log('📱 Client connected:', socket.id);
 
     // Send current state on connection
+    socket.emit('project_state', composer.publicState());
     socket.emit('midi_status', {
         connectedPort: currentMidiInputName,
         availablePorts: getMidiPorts()

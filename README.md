@@ -143,15 +143,26 @@ The app listens for MIDI **Program Change** messages. It maps the Program Change
 
 ---
 
-## 🧩 Composer (PDF set builder)
+## 🧩 Composer (Program Change table)
 
-A helper page for building one merged PDF from several scores. Start PageTurner as usual and open **http://localhost:3000/composer** (or `http://<your-mac>.local:3000/composer` from the iPad).
+Composer maps MIDI **Program Change** numbers to a **song (PDF) and page**. Your PDFs stay in one folder on the Mac; nothing is uploaded or merged.
 
-*   **Add PDFs** by dragging them in or with *Choose PDFs…*. Each row shows the first page, the page count and a page-range field (`1-3,5`, `4-`, empty = all pages).
-*   **Reorder** by dragging the ⠿ handle, or with the ▲ ▼ buttons. Remove with ✕.
-*   **Projects (`.pdset`)** are small JSON files with the file list, order and page ranges.
-    *   **Save to Mac** copies the PDFs and the project into `~/PageTurnerProjects/<name>/`, so it reopens with one click (*Open from Mac…*), no re-attaching.
-    *   **Download .pdset** saves only the list. When you *Open .pdset file…*, drop the PDFs again; they are matched by file name and size (files with the same name but a different size are flagged).
-*   **Export merged PDF** downloads `<project name>.pdf`. Export is blocked while a file is missing, damaged, password-protected, or has an invalid page range.
+**Run it:** start PageTurner as usual, then open **http://localhost:3000/composer/** in a browser on the Mac. (Composer only accepts requests from the Mac itself, because it reads and writes local files. Set `COMPOSER_REMOTE=1` before starting the server to allow other devices.)
 
-Everything runs locally and offline (`pdf-lib` and `pdf.js` are bundled in `public/vendor`). Set the `PAGETURNER_PROJECTS` environment variable to store projects somewhere else.
+**Workflow**
+1. Type or paste the folder path (or press *Browse…*) and press *Load folder*. Only real `.pdf` files directly inside that folder are listed.
+2. Build the table. Each row = `Program Change (0–127)` → `Song` → `Page`. Example: PC 1 → `example.pdf` page 2, PC 2 → `example.pdf` page 1. A song can appear in many rows, numbers can be in any order.
+   - *Add row*, *Duplicate*, ✕ remove, *Sort by PC*.
+   - *Auto-fill*: pick a song and a start number to create one row per page of that song.
+   - Red rows: duplicate or invalid PC, missing file or folder, damaged PDF. Orange rows: page number beyond the PDF's page count.
+3. *Save* writes `~/PageTurnerProjects/<name>.pdset`. *Save & set active* also makes it the project the viewer uses (it is remembered after a restart). *Deactivate* returns to the plain behaviour. *Download .pdset* / *Open .pdset file…* copy a project file manually.
+4. *Test* on a row sends that Program Change through the same server code as real MIDI, so you can check the iPad without Ableton (the project must be saved and active).
+
+**.pdset format** (JSON): `{ "version": 2, "name": "...", "folder": "/absolute/path", "rows": [ { "pc": 1, "song": "example.pdf", "page": 2 } ] }`
+
+**Viewer / MIDI behaviour**
+- *Active project:* a Program Change with a row in the table opens that song (if not already open) and jumps to the page. The top of the screen shows `PC · song · page`. A Program Change with no row shows a short red notice and changes nothing. The iPad downloads the PDFs from the Mac over HTTP and keeps them cached, so changing page inside the same song is instant. Tapping the left/right zones still turns pages within the current song. If the iPad reloads or reconnects, it returns to the song and page last selected.
+- *No active project:* exactly as before. Load a PDF on the device, and Program Change *n* jumps to page *n + 1*.
+- Program Change numbers in the table are the raw MIDI values (0–127), as Ableton sends them.
+
+**Ports:** Composer uses the same server and port 3000 as PageTurner (`PORT=…` to change). It does not touch AbleSet on port 80.
