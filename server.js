@@ -9,10 +9,12 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // Enable static file serving
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/api/composer', require('./composer-api')());
+app.get('/composer', (req, res) => res.redirect('/composer/'));
 app.use('/lib', express.static(path.join(__dirname, 'node_modules/pdfjs-dist/build')));
 
 // MIDI State

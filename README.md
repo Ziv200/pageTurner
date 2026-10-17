@@ -140,3 +140,18 @@ The app listens for MIDI **Program Change** messages. It maps the Program Change
     *   Check the server console log. It should say `Listening to MIDI Input: "Your Port"`.
     *   Open the Settings menu on the iPad and manually select the correct port.
     *   Ensure your DAW is sending to the *same* port name (e.g., "IAC Driver Bus 1").
+
+---
+
+## 🧩 Composer (PDF set builder)
+
+A helper page for building one merged PDF from several scores. Start PageTurner as usual and open **http://localhost:3000/composer** (or `http://<your-mac>.local:3000/composer` from the iPad).
+
+*   **Add PDFs** by dragging them in or with *Choose PDFs…*. Each row shows the first page, the page count and a page-range field (`1-3,5`, `4-`, empty = all pages).
+*   **Reorder** by dragging the ⠿ handle, or with the ▲ ▼ buttons. Remove with ✕.
+*   **Projects (`.pdset`)** are small JSON files with the file list, order and page ranges.
+    *   **Save to Mac** copies the PDFs and the project into `~/PageTurnerProjects/<name>/`, so it reopens with one click (*Open from Mac…*), no re-attaching.
+    *   **Download .pdset** saves only the list. When you *Open .pdset file…*, drop the PDFs again; they are matched by file name and size (files with the same name but a different size are flagged).
+*   **Export merged PDF** downloads `<project name>.pdf`. Export is blocked while a file is missing, damaged, password-protected, or has an invalid page range.
+
+Everything runs locally and offline (`pdf-lib` and `pdf.js` are bundled in `public/vendor`). Set the `PAGETURNER_PROJECTS` environment variable to store projects somewhere else.
