@@ -100,12 +100,12 @@ npm start
 
 ### 4. Configure MIDI (The "Auto-Turn" Setup)
 
-The app listens for MIDI **Program Change** messages. It maps the Program Change number to the Page Number.
+The app listens for MIDI **Program Change** messages. Numbers match what **Ableton displays** ("Pgm N", 1-128).
 
-**Mapping Rule:** `Page Number = MIDI Program Value + 1`
-*   MIDI `0` -> Page 1
-*   MIDI `1` -> Page 2
-*   MIDI `127` -> Page 128
+**Mapping Rule (no Composer project active):** `Ableton Pgm N -> Page N`
+*   Ableton `Pgm 1` (MIDI value 0) -> Page 1
+*   Ableton `Pgm 2` (MIDI value 1) -> Page 2
+*   Ableton `Pgm 128` (MIDI value 127) -> Page 128
 
 #### Setup in Ableton Live (Example):
 1.  **Enable IAC Driver (macOS):**
@@ -151,7 +151,7 @@ Composer maps MIDI **Program Change** numbers to a **song (PDF) and page**. You 
 
 **Workflow**
 1. Drag PDF files onto the page, or press *Choose PDFs…* (you can add more at any time; same-named files are renamed `name (2).pdf`). The list shows each PDF's pages and size, plus the project's total size. ✕ removes a PDF (it warns, and deletes the rows that use it).
-2. Build the table. Each row = `Program Change (0–127)` → `Song` → `Page`. Example: PC 1 → `example.pdf` page 2, PC 2 → `example.pdf` page 1. A song can appear in many rows, numbers can be in any order.
+2. Build the table. Each row = `Program Change (1–128)` → `Song` → `Page`. Example: Pgm 1 → `example.pdf` page 2, Pgm 2 → `example.pdf` page 1. A song can appear in many rows, numbers can be in any order.
    - *Add row*, *Duplicate*, ✕ remove, *Sort by PC*, *Sort by name*: orders rows by the number at the start of the PDF name (`1 Intro.pdf`, `02 - Song.pdf`, `10_Final.pdf`; numeric, so 2 comes before 10), then the rest of the name, then page; unnumbered names go last. PC numbers are never changed. The PDF list and *Add all songs* use the same order.
    - *Add all songs to table*: adds one row (page 1, lowest free PC) for every loaded PDF not already used in a row; songs already in the table are skipped.
    - *Auto-fill*: pick a song and a start number to create one row per page of that song.
@@ -162,8 +162,8 @@ Composer maps MIDI **Program Change** numbers to a **song (PDF) and page**. You 
 **.pdset format (version 3)**: one binary file: the 8 bytes `PDSET3\0\0`, a 4-byte big-endian header length, a JSON header, then the raw PDF bytes one after another. Header: `{ "version": 3, "name": "...", "rows": [ { "pc": 1, "song": "example.pdf", "page": 2 } ], "pdfs": [ { "name": "example.pdf", "size": 12345, "pages": 3 } ] }`. PDF positions are derived from the sizes, and the PDFs are stored unchanged (no re-encoding, no base64), so the file is only slightly larger than the PDFs and big projects stream to disk without being loaded into memory twice. Limit: 2 GB per project (`COMPOSER_MAX_BYTES` to change). Old version 2 (folder-based) projects cannot be opened; load the PDFs and save again.
 
 **Viewer / MIDI behaviour**
-- *Active project:* a Program Change with a row in the table opens that song (if not already open) and jumps to the page. The top of the screen shows `PC · song · page`. A Program Change with no row shows a short red notice and changes nothing. The server serves only the PDFs embedded in the active project; the iPad downloads them over HTTP and keeps them cached, so changing page inside the same song is instant. Tapping the left/right zones still turns pages within the current song. If the iPad reloads or reconnects, it returns to the song and page last selected.
-- *No active project:* exactly as before. Load a PDF on the device, and Program Change *n* jumps to page *n + 1*.
-- Program Change numbers in the table are the raw MIDI values (0–127), as Ableton sends them.
+- *Active project:* a Program Change with a row in the table opens that song (if not already open) and jumps to the page. The top of the screen shows `Pgm N · song · page`. A Program Change with no row shows a short red notice and changes nothing. The server serves only the PDFs embedded in the active project; the iPad downloads them over HTTP and keeps them cached, so changing page inside the same song is instant. Tapping the left/right zones still turns pages within the current song. If the iPad reloads or reconnects, it returns to the song and page last selected.
+- *No active project:* exactly as before. Load a PDF on the device, and Ableton `Pgm N` jumps to page *N*.
+- Program Change numbers in the table are the numbers **as displayed by Ableton** (`Pgm N`, 1–128). The server converts the raw MIDI value (0–127) to N = value + 1, in one place, for both real MIDI and the Test button. Projects saved earlier keep their stored numbers unchanged (no migration): a row with number 0 now shows red as invalid and must be changed to 1–128, and other rows may need +1 if they were entered as raw values.
 
 **Ports:** Composer uses the same server and port 3000 as PageTurner (`PORT=…` to change). It does not touch AbleSet on port 80.

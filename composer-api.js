@@ -95,7 +95,7 @@ function cleanHeader(h) {
     if (!Array.isArray(h.rows) || h.rows.length > 1000) throw httpError(400, 'Project rows are invalid');
     const rows = h.rows.map((r, i) => {
         const pc = r && r.pc, page = r && r.page, song = r && r.song;
-        if (!Number.isInteger(pc) || pc < 0 || pc > 127) throw httpError(400, 'Row ' + (i + 1) + ': Program Change must be a whole number 0-127');
+        if (!Number.isInteger(pc) || pc < 1 || pc > 128) throw httpError(400, 'Row ' + (i + 1) + ': Program Change must be a whole number 1-128');
         if (!Number.isInteger(page) || page < 1 || page > 100000) throw httpError(400, 'Row ' + (i + 1) + ': page must be a whole number, 1 or more');
         if (!safeSongName(song)) throw httpError(400, 'Row ' + (i + 1) + ': invalid song file name');
         if (!names.has(song)) throw httpError(400, 'Row ' + (i + 1) + ': song "' + song + '" is not stored in the project');
@@ -147,20 +147,23 @@ module.exports = function createComposer(io) {
     }
 
     // Single code path for real MIDI and the test button.
-    function handleProgramChange(pc, source) {
+    // `raw` is the raw MIDI Program Change value (0-127). Ableton displays it as raw+1 (1-128),
+    // and the project table uses the Ableton-style number. The ONLY raw->table mapping is here.
+    function handleProgramChange(raw, source) {
+        const pc = raw + 1;   // Ableton-style number "Pgm N"
         if (!active) {
-            console.log(`🎛️ PC ${pc} (${source}) -> no active project, jump to page ${pc + 1}`);
-            io.emit('page_change', { page: pc + 1 });
-            return { mode: 'direct', page: pc + 1 };
+            console.log(`🎛️ Pgm ${pc} (raw ${raw}, ${source}) -> no active project, jump to page ${pc}`);
+            io.emit('page_change', { page: pc });
+            return { mode: 'direct', page: pc };
         }
         const row = active.byPc.get(pc);
         if (!row) {
-            console.log(`🎛️ PC ${pc} (${source}) -> not in project "${active.name}"`);
+            console.log(`🎛️ Pgm ${pc} (raw ${raw}, ${source}) -> not in project "${active.name}"`);
             io.emit('pc_unknown', { pc });
             return { mode: 'project', found: false, pc };
         }
         current = { seq: ++seq, pc: row.pc, song: row.song, page: row.page };
-        console.log(`🎛️ PC ${pc} (${source}) -> "${row.song}" page ${row.page}`);
+        console.log(`🎛️ Pgm ${pc} (raw ${raw}, ${source}) -> "${row.song}" page ${row.page}`);
         io.emit('song_select', current);
         return { mode: 'project', found: true, ...current };
     }
@@ -283,8 +286,8 @@ module.exports = function createComposer(io) {
     // Simulates a MIDI Program Change through the exact same handler as real MIDI.
     router.post('/test-pc', express.json({ limit: '1kb' }), wrap(async (req, res) => {
         const pc = req.body && req.body.pc;
-        if (!Number.isInteger(pc) || pc < 0 || pc > 127) throw httpError(400, 'pc must be a whole number 0-127');
-        res.json(handleProgramChange(pc, 'test'));
+        if (!Number.isInteger(pc) || pc < 1 || pc > 128) throw httpError(400, 'pc must be a whole number 1-128');
+        res.json(handleProgramChange(pc - 1, 'test'));   // table number as shown -> simulate raw MIDI = n-1
     }));
 
     return { router, handleProgramChange, publicState };

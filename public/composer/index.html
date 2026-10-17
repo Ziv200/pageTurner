@@ -54,13 +54,13 @@
             <select id="fill-song"></select>
         </label>
         <label class="inline">from PC
-            <input id="fill-start" type="number" min="0" max="127" value="0">
+            <input id="fill-start" type="number" min="1" max="128" value="1">
         </label>
         <button id="btn-fill">Add rows</button>
     </section>
 
     <table id="table">
-        <thead><tr><th class="c-thumb"></th><th class="c-pc">Program Change (0&ndash;127)</th><th>Song (PDF)</th><th class="c-page">Page</th><th class="c-actions"></th></tr></thead>
+        <thead><tr><th class="c-thumb"></th><th class="c-pc">Program Change (1&ndash;128, as in Ableton)</th><th>Song (PDF)</th><th class="c-page">Page</th><th class="c-actions"></th></tr></thead>
         <tbody id="rows"></tbody>
     </table>
     <p id="empty" class="empty">No rows yet. Load some PDFs, then add rows or use auto-fill.</p>

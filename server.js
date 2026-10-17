@@ -61,11 +61,11 @@ function setMidiPort(portName) {
         currentMidiInputName = targetName;
 
         console.log(`\n✅ Listening to MIDI Input: "${targetName}"`);
-        console.log('   Mapping: MIDI Program Change -> song + page (active project) or PDF page (no project)');
+        console.log('   Mapping: Ableton Pgm N -> song + page (active project) or PDF page N (no project)');
 
         midiInput.on('program', (msg) => {
             // Active project: PC -> song + page lookup. No project: PC -> page (original behaviour).
-            composer.handleProgramChange(msg.number, 'midi');
+            composer.handleProgramChange(msg.number, 'midi');  // raw 0-127; mapped to Ableton-style n+1 inside
         });
 
         return true;

@@ -47,7 +47,7 @@
             var v = { level: 'ok', msg: '' };
             var pc = toInt(r.pc), pg = toInt(r.page);
             function bad(m, f) { v.level = 'bad'; v.msg = v.msg || m; if (f) v[f] = true; }
-            if (isNaN(pc) || pc < 0 || pc > 127) { bad('Program Change must be a whole number 0-127', 'pcErr'); fatal++; }
+            if (isNaN(pc) || pc < 1 || pc > 128) { bad('Program Change must be a whole number 1-128', 'pcErr'); fatal++; }
             else if (counts[pc] > 1) { bad('Duplicate Program Change ' + pc + ' - each number can be used once', 'pcErr'); fatal++; }
             if (!r.song) { bad('Choose a song', 'songErr'); fatal++; }
             if (isNaN(pg) || pg < 1) { bad('Page must be a whole number, 1 or more', 'pageErr'); fatal++; }
@@ -129,7 +129,7 @@
     function buildRow(r) {
         var tr = el('tr'); tr.dataset.id = r.id;
         var tdT = el('td', 'c-thumb'); var th = el('div', 'thumb'); tdT.appendChild(th); tr.appendChild(tdT);
-        var tdPc = el('td', 'c-pc'); var pc = el('input', 'pcin'); pc.type = 'number'; pc.min = 0; pc.max = 127; pc.step = 1; pc.value = r.pc; pc.setAttribute('aria-label', 'Program Change');
+        var tdPc = el('td', 'c-pc'); var pc = el('input', 'pcin'); pc.type = 'number'; pc.min = 1; pc.max = 128; pc.step = 1; pc.value = r.pc; pc.setAttribute('aria-label', 'Program Change');
         pc.addEventListener('input', function () { r.pc = pc.value; markDirty(); refresh(true); }); tdPc.appendChild(pc); tr.appendChild(tdPc);
         var tdS = el('td', 'c-song'); tdS.appendChild(songSelect(r)); tdS.appendChild(el('div', 'msg')); tr.appendChild(tdS);
         var tdG = el('td', 'c-page'); var pg = el('input', 'pgin'); pg.type = 'number'; pg.min = 1; pg.step = 1; pg.value = r.page; pg.setAttribute('aria-label', 'Page');
@@ -289,7 +289,7 @@
     // ---------- table toolbar ----------
     $('btn-add-row').addEventListener('click', function () {
         var used = {}; state.rows.forEach(function (r) { used[r.pc] = 1; });
-        var n = 0; while (used[n] && n < 127) n++;
+        var n = 1; while (used[n] && n < 128) n++;
         var last = state.rows[state.rows.length - 1];
         state.rows.push(newRow({ pc: String(n), song: last ? last.song : (state.files[0] ? state.files[0].name : ''), page: '1' }));
         markDirty(); rebuild();
@@ -310,8 +310,8 @@
     $('btn-fill').addEventListener('click', function () {
         var song = $('fill-song').value, fi = fileInfo(song), start = toInt($('fill-start').value);
         if (!fi || fi.error) return notice('Choose a readable song to auto-fill.', 'error');
-        if (isNaN(start) || start < 0) return notice('Start number must be 0-127.', 'error');
-        if (start + fi.pages - 1 > 127) return notice('Not enough numbers: ' + fi.pages + ' pages from ' + start + ' goes beyond 127. Nothing added.', 'error');
+        if (isNaN(start) || start < 1 || start > 128) return notice('Start number must be 1-128.', 'error');
+        if (start + fi.pages - 1 > 128) return notice('Not enough numbers: ' + fi.pages + ' pages from ' + start + ' goes beyond 128. Nothing added.', 'error');
         for (var p = 1; p <= fi.pages; p++) state.rows.push(newRow({ pc: String(start + p - 1), song: song, page: String(p) }));
         markDirty(); rebuild();
         notice('Added ' + fi.pages + ' rows for ' + song + ' (PC ' + start + '–' + (start + fi.pages - 1) + ').' + (hasDup() ? ' Some numbers are already used – see the red rows.' : ''), hasDup() ? '' : 'ok');
@@ -324,13 +324,13 @@
             if (full) return;
             if (state.rows.some(function (r) { return r.song === f.name; })) { skipped++; return; }
             if (f.error) { bad++; return; }
-            var pc = 0; while (pc <= 127 && used[pc]) pc++;
-            if (pc > 127) { full = true; return; }
+            var pc = 1; while (pc <= 128 && used[pc]) pc++;
+            if (pc > 128) { full = true; return; }
             used[pc] = true; state.rows.push(newRow({ pc: String(pc), song: f.name, page: '1' })); added++;
         });
         if (added) { markDirty(); rebuild(); }
         var msg = 'Added ' + added + ' song' + (added === 1 ? '' : 's') + ', skipped ' + skipped + ' already in the table' + (bad ? ' (' + bad + ' unreadable PDF' + (bad === 1 ? '' : 's') + ' ignored)' : '') + '.';
-        if (full) msg += ' Warning: no free Program Change numbers left (0–127); remaining songs were not added.';
+        if (full) msg += ' Warning: no free Program Change numbers left (1–128); remaining songs were not added.';
         notice(msg, full ? 'error' : 'ok');
     });
     function hasDup() { var v = validate(); return state.rows.some(function (r) { return v[r.id].pcErr; }); }

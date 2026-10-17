@@ -155,7 +155,7 @@ function showNotice(text, ms) {
 function updateSongInfo() {
     if (!projectActive || !currentSong) { songInfoEl.style.display = 'none'; return; }
     const pages = pdfDoc ? ' / ' + pdfDoc.numPages : '';
-    songInfoEl.innerText = (currentPc !== null ? 'PC ' + currentPc + '  \u00b7  ' : '') +
+    songInfoEl.innerText = (currentPc !== null ? 'Pgm ' + currentPc + '  \u00b7  ' : '') +
         currentSong.replace(/\.pdf$/i, '') + '  \u00b7  p. ' + pageNum + pages;
     songInfoEl.style.display = 'block';
 }
@@ -254,7 +254,7 @@ socket.on('song_select', function (sel) {
 });
 
 socket.on('pc_unknown', function (d) {
-    showNotice('Program Change ' + d.pc + ' is not in project "' + projectName + '"', 3000);
+    showNotice('Pgm ' + d.pc + ' is not in project "' + projectName + '"', 3000);
 });
 
 socket.on('page_change', function (data) {
