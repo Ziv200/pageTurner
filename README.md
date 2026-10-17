@@ -153,6 +153,7 @@ Composer maps MIDI **Program Change** numbers to a **song (PDF) and page**. You 
 1. Drag PDF files onto the page, or press *Choose PDFs…* (you can add more at any time; same-named files are renamed `name (2).pdf`). The list shows each PDF's pages and size, plus the project's total size. ✕ removes a PDF (it warns, and deletes the rows that use it).
 2. Build the table. Each row = `Program Change (0–127)` → `Song` → `Page`. Example: PC 1 → `example.pdf` page 2, PC 2 → `example.pdf` page 1. A song can appear in many rows, numbers can be in any order.
    - *Add row*, *Duplicate*, ✕ remove, *Sort by PC*.
+   - *Add all songs to table*: adds one row (page 1, lowest free PC) for every loaded PDF not already used in a row; songs already in the table are skipped.
    - *Auto-fill*: pick a song and a start number to create one row per page of that song.
    - Red rows: duplicate or invalid PC, a song that is not loaded, damaged PDF. Orange rows: page number beyond the PDF's page count.
 3. *Save as project* writes one self-contained file, `~/PageTurnerProjects/<name>.pdset`, with all PDFs inside. After that you can move or delete the original PDFs. *Open…* lists saved projects; *Open .pdset file…* opens a `.pdset` from any folder (for example one you copied to another Mac). *Save & set active* also makes it the project the viewer uses (it is remembered after a restart). *Deactivate* returns to the plain behaviour. *Download .pdset* saves a copy through the browser.

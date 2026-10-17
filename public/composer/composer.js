@@ -292,6 +292,23 @@
         markDirty(); rebuild();
         notice('Added ' + fi.pages + ' rows for ' + song + ' (PC ' + start + '–' + (start + fi.pages - 1) + ').' + (hasDup() ? ' Some numbers are already used – see the red rows.' : ''), hasDup() ? '' : 'ok');
     });
+    $('btn-add-all').addEventListener('click', function () {
+        if (!state.files.length) return;
+        var used = {}, added = 0, skipped = 0, bad = 0, full = false;
+        state.rows.forEach(function (r) { var n = toInt(r.pc); if (!isNaN(n)) used[n] = true; });
+        state.files.forEach(function (f) {
+            if (full) return;
+            if (state.rows.some(function (r) { return r.song === f.name; })) { skipped++; return; }
+            if (f.error) { bad++; return; }
+            var pc = 0; while (pc <= 127 && used[pc]) pc++;
+            if (pc > 127) { full = true; return; }
+            used[pc] = true; state.rows.push(newRow({ pc: String(pc), song: f.name, page: '1' })); added++;
+        });
+        if (added) { markDirty(); rebuild(); }
+        var msg = 'Added ' + added + ' song' + (added === 1 ? '' : 's') + ', skipped ' + skipped + ' already in the table' + (bad ? ' (' + bad + ' unreadable PDF' + (bad === 1 ? '' : 's') + ' ignored)' : '') + '.';
+        if (full) msg += ' Warning: no free Program Change numbers left (0–127); remaining songs were not added.';
+        notice(msg, full ? 'error' : 'ok');
+    });
     function hasDup() { var v = validate(); return state.rows.some(function (r) { return v[r.id].pcErr; }); }
 
     // ---------- projects ----------
