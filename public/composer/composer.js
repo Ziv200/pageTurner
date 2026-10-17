@@ -100,6 +100,21 @@
         }).then(function (url) { if (url) thumbs[key] = url; done(url); }, function () { delete docs[fi.uid]; job.box.textContent = '?'; runThumbs(); });
     }
 
+    // ---------- name ordering (shared) ----------
+    // Convention: file name starts with a number ("1 Intro.pdf", "02 - Song.pdf", "10_Final.pdf").
+    function nameKey(name) {
+        var n = String(name || '').replace(/\.pdf$/i, ''), m = /^\s*(\d+)\s*[-_.\s]*/.exec(n);
+        return m ? { num: parseInt(m[1], 10), rest: n.slice(m[0].length) } : { num: null, rest: n };
+    }
+    function cmpNames(a, b) {
+        var x = nameKey(a), y = nameKey(b);
+        if (x.num !== null && y.num === null) return -1;
+        if (x.num === null && y.num !== null) return 1;
+        if (x.num !== null && x.num !== y.num) return x.num - y.num;
+        return x.rest.localeCompare(y.rest, undefined, { numeric: true, sensitivity: 'base' }) || String(a).localeCompare(String(b), undefined, { numeric: true });
+    }
+    function sortFiles() { state.files.sort(function (a, b) { return cmpNames(a.name, b.name); }); }
+
     // ---------- rendering ----------
     var rowEls = {};
     function songSelect(r) {
@@ -202,7 +217,7 @@
             function next() {
                 if (i >= pdfs.length) {
                     $('pdf-summary').textContent = '';
-                    markDirty(); rebuild();
+                    sortFiles(); markDirty(); rebuild();
                     var msg = 'Added ' + (pdfs.length - bad.length) + ' PDF' + (pdfs.length - bad.length === 1 ? '' : 's') + '.';
                     if (renamed) msg += ' ' + renamed + ' renamed because the name was already used.';
                     if (skipped) msg += ' ' + skipped + ' non-PDF file' + (skipped === 1 ? '' : 's') + ' ignored.';
@@ -282,6 +297,15 @@
     $('btn-sort').addEventListener('click', function () {
         state.rows.sort(function (a, b) { var x = toInt(a.pc), y = toInt(b.pc); return (isNaN(x) ? 999 : x) - (isNaN(y) ? 999 : y); });
         markDirty(); rebuild();
+    });
+    $('btn-sort-name').addEventListener('click', function () {
+        var idx = new Map(); state.rows.forEach(function (r, i) { idx.set(r, i); });
+        function pg(r) { var n = toInt(r.page); return isNaN(n) ? 1e9 : n; }
+        state.rows.sort(function (a, b) {
+            if (!a.song !== !b.song) return a.song ? -1 : 1;
+            return (a.song && a.song !== b.song ? cmpNames(a.song, b.song) : 0) || pg(a) - pg(b) || idx.get(a) - idx.get(b);
+        });
+        markDirty(); rebuild(); notice('Sorted by name', 'ok');
     });
     $('btn-fill').addEventListener('click', function () {
         var song = $('fill-song').value, fi = fileInfo(song), start = toInt($('fill-start').value);
@@ -392,6 +416,7 @@
         resetFiles();
         nameEl.value = h.name || 'Untitled';
         h.pdfs.forEach(function (p, i) { state.files.push({ uid: state.nextFileId++, name: p.name, size: p.size, pages: p.pages, error: p.error ? 'Damaged or unreadable PDF' : null, blob: blobs[i] }); });
+        sortFiles();
         state.rows = h.rows.map(function (r) { return newRow({ pc: String(r.pc), song: r.song, page: String(r.page) }); });
         savedName = savedAs || null; dirty = false;
         $('pdf-summary').textContent = ''; rebuild();

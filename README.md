@@ -152,7 +152,7 @@ Composer maps MIDI **Program Change** numbers to a **song (PDF) and page**. You 
 **Workflow**
 1. Drag PDF files onto the page, or press *Choose PDFs…* (you can add more at any time; same-named files are renamed `name (2).pdf`). The list shows each PDF's pages and size, plus the project's total size. ✕ removes a PDF (it warns, and deletes the rows that use it).
 2. Build the table. Each row = `Program Change (0–127)` → `Song` → `Page`. Example: PC 1 → `example.pdf` page 2, PC 2 → `example.pdf` page 1. A song can appear in many rows, numbers can be in any order.
-   - *Add row*, *Duplicate*, ✕ remove, *Sort by PC*.
+   - *Add row*, *Duplicate*, ✕ remove, *Sort by PC*, *Sort by name*: orders rows by the number at the start of the PDF name (`1 Intro.pdf`, `02 - Song.pdf`, `10_Final.pdf`; numeric, so 2 comes before 10), then the rest of the name, then page; unnumbered names go last. PC numbers are never changed. The PDF list and *Add all songs* use the same order.
    - *Add all songs to table*: adds one row (page 1, lowest free PC) for every loaded PDF not already used in a row; songs already in the table are skipped.
    - *Auto-fill*: pick a song and a start number to create one row per page of that song.
    - Red rows: duplicate or invalid PC, a song that is not loaded, damaged PDF. Orange rows: page number beyond the PDF's page count.
