@@ -145,23 +145,23 @@ The app listens for MIDI **Program Change** messages. It maps the Program Change
 
 ## 🧩 Composer (Program Change table)
 
-Composer maps MIDI **Program Change** numbers to a **song (PDF) and page**. Your PDFs stay in one folder on the Mac; nothing is uploaded or merged.
+Composer maps MIDI **Program Change** numbers to a **song (PDF) and page**. You load PDFs into Composer, and the saved project (`.pdset`) contains the PDFs inside it, so it never depends on the original files. Nothing is uploaded anywhere or merged.
 
 **Run it:** start PageTurner as usual, then open **http://localhost:3000/composer/** in a browser on the Mac. (Composer only accepts requests from the Mac itself, because it reads and writes local files. Set `COMPOSER_REMOTE=1` before starting the server to allow other devices.)
 
 **Workflow**
-1. Type or paste the folder path (or press *Browse…*) and press *Load folder*. Only real `.pdf` files directly inside that folder are listed.
+1. Drag PDF files onto the page, or press *Choose PDFs…* (you can add more at any time; same-named files are renamed `name (2).pdf`). The list shows each PDF's pages and size, plus the project's total size. ✕ removes a PDF (it warns, and deletes the rows that use it).
 2. Build the table. Each row = `Program Change (0–127)` → `Song` → `Page`. Example: PC 1 → `example.pdf` page 2, PC 2 → `example.pdf` page 1. A song can appear in many rows, numbers can be in any order.
    - *Add row*, *Duplicate*, ✕ remove, *Sort by PC*.
    - *Auto-fill*: pick a song and a start number to create one row per page of that song.
-   - Red rows: duplicate or invalid PC, missing file or folder, damaged PDF. Orange rows: page number beyond the PDF's page count.
-3. *Save* writes `~/PageTurnerProjects/<name>.pdset`. *Save & set active* also makes it the project the viewer uses (it is remembered after a restart). *Deactivate* returns to the plain behaviour. *Download .pdset* / *Open .pdset file…* copy a project file manually.
+   - Red rows: duplicate or invalid PC, a song that is not loaded, damaged PDF. Orange rows: page number beyond the PDF's page count.
+3. *Save as project* writes one self-contained file, `~/PageTurnerProjects/<name>.pdset`, with all PDFs inside. After that you can move or delete the original PDFs. *Open…* lists saved projects; *Open .pdset file…* opens a `.pdset` from any folder (for example one you copied to another Mac). *Save & set active* also makes it the project the viewer uses (it is remembered after a restart). *Deactivate* returns to the plain behaviour. *Download .pdset* saves a copy through the browser.
 4. *Test* on a row sends that Program Change through the same server code as real MIDI, so you can check the iPad without Ableton (the project must be saved and active).
 
-**.pdset format** (JSON): `{ "version": 2, "name": "...", "folder": "/absolute/path", "rows": [ { "pc": 1, "song": "example.pdf", "page": 2 } ] }`
+**.pdset format (version 3)**: one binary file: the 8 bytes `PDSET3\0\0`, a 4-byte big-endian header length, a JSON header, then the raw PDF bytes one after another. Header: `{ "version": 3, "name": "...", "rows": [ { "pc": 1, "song": "example.pdf", "page": 2 } ], "pdfs": [ { "name": "example.pdf", "size": 12345, "pages": 3 } ] }`. PDF positions are derived from the sizes, and the PDFs are stored unchanged (no re-encoding, no base64), so the file is only slightly larger than the PDFs and big projects stream to disk without being loaded into memory twice. Limit: 2 GB per project (`COMPOSER_MAX_BYTES` to change). Old version 2 (folder-based) projects cannot be opened; load the PDFs and save again.
 
 **Viewer / MIDI behaviour**
-- *Active project:* a Program Change with a row in the table opens that song (if not already open) and jumps to the page. The top of the screen shows `PC · song · page`. A Program Change with no row shows a short red notice and changes nothing. The iPad downloads the PDFs from the Mac over HTTP and keeps them cached, so changing page inside the same song is instant. Tapping the left/right zones still turns pages within the current song. If the iPad reloads or reconnects, it returns to the song and page last selected.
+- *Active project:* a Program Change with a row in the table opens that song (if not already open) and jumps to the page. The top of the screen shows `PC · song · page`. A Program Change with no row shows a short red notice and changes nothing. The server serves only the PDFs embedded in the active project; the iPad downloads them over HTTP and keeps them cached, so changing page inside the same song is instant. Tapping the left/right zones still turns pages within the current song. If the iPad reloads or reconnects, it returns to the song and page last selected.
 - *No active project:* exactly as before. Load a PDF on the device, and Program Change *n* jumps to page *n + 1*.
 - Program Change numbers in the table are the raw MIDI values (0–127), as Ableton sends them.
 

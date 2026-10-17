@@ -22,24 +22,25 @@
         <div class="buttons">
             <button id="btn-new">New</button>
             <button id="btn-open-mac">Open&hellip;</button>
-            <button id="btn-save-mac">Save</button>
-            <button id="btn-save-file" title="Download a copy of the .pdset file">Download .pdset</button>
+            <button id="btn-save-mac" title="Saves ~/PageTurnerProjects/&lt;name&gt;.pdset with the PDFs inside">Save as project</button>
+            <button id="btn-save-file" title="Download a self-contained .pdset file (PDFs included)">Download .pdset</button>
             <button id="btn-open-file" title="Open a .pdset file from disk">Open .pdset file&hellip;</button>
             <button id="btn-activate" class="primary" title="Saves, then makes the viewer use this table">Save &amp; set active</button>
             <button id="btn-deactivate" hidden>Deactivate</button>
         </div>
     </section>
 
-    <section class="folderbar">
-        <label class="field grow">PDF folder (on this Mac)
-            <input id="folder-path" type="text" placeholder="/Users/you/Music/Setlist" spellcheck="false" autocapitalize="off" autocorrect="off">
-        </label>
-        <div class="buttons">
-            <button id="btn-load-folder">Load folder</button>
-            <button id="btn-browse">Browse&hellip;</button>
+    <section id="dropzone" class="dropzone" tabindex="0">
+        <div class="dz-main"><strong>Drop PDF files here</strong> or
+            <button id="btn-add-pdfs" class="primary">Choose PDFs&hellip;</button></div>
+        <div class="hint">The PDFs are stored inside the project file when you save, so the originals can be moved or deleted afterwards.</div>
+        <div id="filebar" class="filebar" hidden>
+            <div id="progress" class="progress" hidden><div></div></div>
+            <div id="pdf-summary" class="hint"></div>
+            <ul id="pdf-list" class="pdflist"></ul>
         </div>
     </section>
-    <div id="folder-status" class="hint"></div>
+    <input id="file-pdfs" type="file" accept=".pdf,application/pdf" multiple hidden>
 
     <div id="notice" class="notice" hidden></div>
 
@@ -60,7 +61,7 @@
         <thead><tr><th class="c-thumb"></th><th class="c-pc">Program Change (0&ndash;127)</th><th>Song (PDF)</th><th class="c-page">Page</th><th class="c-actions"></th></tr></thead>
         <tbody id="rows"></tbody>
     </table>
-    <p id="empty" class="empty">No rows yet. Choose a folder, then add rows or use auto-fill.</p>
+    <p id="empty" class="empty">No rows yet. Load some PDFs, then add rows or use auto-fill.</p>
     <p class="hint">Each row: when the viewer receives that Program Change, it opens that PDF at that page. A song can appear in many rows. Test sends the number through the server, exactly like MIDI (needs the project to be active and saved).</p>
 </main>
 
@@ -68,10 +69,10 @@
     <div class="box">
         <h2 id="dialog-title"></h2>
         <div id="dialog-body"></div>
-        <div class="dialog-actions"><button id="dialog-close">Close</button><button id="dialog-ok" class="primary" hidden>Use this folder</button></div>
+        <div class="dialog-actions"><button id="dialog-close">Close</button></div>
     </div>
 </div>
-<input id="file-pdset" type="file" accept=".pdset,application/json" hidden>
+<input id="file-pdset" type="file" accept=".pdset" hidden>
 <script src="composer.js"></script>
 </body>
 </html>
