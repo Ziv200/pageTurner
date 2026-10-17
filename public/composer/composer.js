@@ -319,13 +319,16 @@
     $('btn-add-all').addEventListener('click', function () {
         if (!state.files.length) return;
         var used = {}, added = 0, skipped = 0, bad = 0, full = false;
-        state.rows.forEach(function (r) { var n = toInt(r.pc); if (!isNaN(n)) used[n] = true; });
+        var maxPc = 0;
+        state.rows.forEach(function (r) { var n = toInt(r.pc); if (!isNaN(n)) { used[n] = true; if (n > maxPc) maxPc = n; } });
         state.files.forEach(function (f) {
             if (full) return;
             if (state.rows.some(function (r) { return r.song === f.name; })) { skipped++; return; }
             if (f.error) { bad++; return; }
-            var pc = 1; while (pc <= 128 && used[pc]) pc++;
+            var pc = maxPc + 1; while (pc <= 128 && used[pc]) pc++;
+            if (pc > 128) { pc = 1; while (pc <= 128 && used[pc]) pc++; }
             if (pc > 128) { full = true; return; }
+            maxPc = Math.max(maxPc, pc);
             used[pc] = true; state.rows.push(newRow({ pc: String(pc), song: f.name, page: '1' })); added++;
         });
         if (added) { markDirty(); rebuild(); }
