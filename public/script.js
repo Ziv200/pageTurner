@@ -358,6 +358,19 @@ socket.on('page_change', function (data) {
     }
 });
 
+function prevPage() { if (!pdfDoc || pageNum <= 1) return; pageNum--; queueRenderPage(pageNum); }
+function nextPage() { if (!pdfDoc || pageNum >= pdfDoc.numPages) return; pageNum++; queueRenderPage(pageNum); }
+
+// Keyboard / Bluetooth page-turn pedals (AirTurn, PageFlip etc. send arrow / page keys)
+document.addEventListener('keydown', function (e) {
+    if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+    if (document.getElementById('settings-modal').style.display === 'flex') return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key;
+    if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'PageDown' || k === ' ' || k === 'Spacebar') { e.preventDefault(); nextPage(); }
+    else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'PageUp') { e.preventDefault(); prevPage(); }
+});
+
 // Manual Navigation (Tap/Click)
 // Navigation Handler
 function handleNavigation(e) {
@@ -389,17 +402,9 @@ function handleNavigation(e) {
     }
 
     // Left 30% -> Previous Page
-    if (clientX < width * 0.3) {
-        if (pageNum <= 1) return;
-        pageNum--;
-        queueRenderPage(pageNum);
-    }
+    if (clientX < width * 0.3) prevPage();
     // Right 30% -> Next Page
-    else if (clientX > width * 0.7) {
-        if (pageNum >= pdfDoc.numPages) return;
-        pageNum++;
-        queueRenderPage(pageNum);
-    }
+    else if (clientX > width * 0.7) nextPage();
 }
 
 // Manual Navigation (Tap/Click)
@@ -490,7 +495,11 @@ pdfUploadInput.addEventListener('change', (e) => {
 // --- Socket.io MIDI Events ---
 socket.on('midi_status', (data) => {
     updateMidiList(data.availablePorts, data.connectedPort);
+    midiState = data;
+    if (data.lastPc) showLastPc(data.lastPc);
+    renderBadge();
 });
+socket.on('midi_pc', showLastPc);
 
 socket.on('midi_ports_list', (data) => {
     updateMidiList(data.ports, data.active);
@@ -517,3 +526,59 @@ function updateMidiList(ports, activePort) {
         midiPortSelect.appendChild(option);
     });
 }
+
+
+// ---------- Gig safety: connection badge, MIDI warning, keep screen awake ----------
+const connBadge = document.getElementById('conn-badge');
+let socketUp = false, everConnected = false, okTimer = null;
+let midiState = null;
+function renderBadge() {
+    clearTimeout(okTimer);
+    if (!socketUp) {
+        connBadge.className = 'offline';
+        connBadge.textContent = everConnected ? '⚠️ Offline – reconnecting to the Mac…' : 'Connecting to the Mac…';
+        connBadge.hidden = false; return;
+    }
+    if (midiState && !midiState.connectedPort) {
+        connBadge.className = 'warn';
+        connBadge.textContent = midiState.wantedPort ? '⚠️ MIDI input "' + midiState.wantedPort + '" lost – waiting for it' : '⚠️ No MIDI input selected (⚙︎ Settings)';
+        connBadge.hidden = false; return;
+    }
+    connBadge.hidden = true;
+}
+socket.on('connect', function () {
+    const wasDown = everConnected && !socketUp;
+    socketUp = true; everConnected = true; renderBadge();
+    if (wasDown) { connBadge.className = 'ok'; connBadge.textContent = '✓ Reconnected'; connBadge.hidden = false; okTimer = setTimeout(renderBadge, 2000); }
+});
+socket.on('disconnect', function () { socketUp = false; renderBadge(); });
+socket.io.on('reconnect_attempt', function () { if (!socketUp) renderBadge(); });
+setTimeout(renderBadge, 1500);
+
+function showLastPc(p) {
+    const el = document.getElementById('last-pc');
+    if (!el || !p) return;
+    el.textContent = 'Last Program Change: Pgm ' + p.pc + ' at ' + new Date(p.at).toLocaleTimeString() + ' (' + p.port + ')';
+}
+const _uml = updateMidiList;
+updateMidiList = function (ports, active) {
+    _uml(ports, active);
+    const el = document.getElementById('midi-live');
+    if (el) el.textContent = active ? 'MIDI: listening to "' + active + '"' : 'MIDI: no input connected';
+};
+
+// Keep the screen awake. Wake Lock needs HTTPS, which a plain http://Mac address is not, so on the iPad
+// we fall back to a silent 1px looping video (started on the first tap, as iOS requires a gesture).
+let wakeLock = null;
+const noSleep = document.getElementById('nosleep');
+function keepAwake() {
+    if ('wakeLock' in navigator && window.isSecureContext) {
+        if (wakeLock || document.visibilityState !== 'visible') return;
+        navigator.wakeLock.request('screen').then(function (l) { wakeLock = l; l.addEventListener('release', function () { wakeLock = null; }); }).catch(function () {});
+    } else if (noSleep && noSleep.paused) {
+        const p = noSleep.play(); if (p && p.catch) p.catch(function () {});
+    }
+}
+['touchend', 'click', 'keydown'].forEach(function (ev) { document.addEventListener(ev, keepAwake, { passive: true }); });
+document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') keepAwake(); });
+keepAwake();

@@ -11,7 +11,38 @@
     var tbody = $('rows');
 
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
-    function markDirty() { dirty = true; }
+    function markDirty() { dirty = true; updateSaveState(); scheduleDraft(); }
+    // ---------- save-state pill: Unsaved / Saved, not active / Active on iPad ----------
+    function updateSaveState() {
+        var e = document.getElementById('save-state'); if (!e) return;
+        var name = (document.getElementById('project-name').value || '').trim() || 'Untitled';
+        if (dirty && (state.rows.length || state.files.length)) { e.textContent = '● Unsaved changes'; e.className = 'pill dirty'; }
+        else if (!savedName) { e.textContent = 'Not saved'; e.className = 'pill muted'; }
+        else if (projectActiveName === savedName && savedName === name) { e.textContent = '✓ Saved · active on iPad'; e.className = 'pill live'; }
+        else { e.textContent = 'Saved · NOT active on iPad'; e.className = 'pill saved'; }
+    }
+    // ---------- draft autosave (IndexedDB, survives a crash / closed tab; PDFs included) ----------
+    var DRAFT_DB = 'pageturner-composer', draftTimer = null;
+    function idb() { return new Promise(function (res, rej) { if (!window.indexedDB) return rej(new Error('no idb')); var r = indexedDB.open(DRAFT_DB, 1); r.onupgradeneeded = function () { r.result.createObjectStore('draft'); }; r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); }; }); }
+    function idbDo(mode, fn) { return idb().then(function (db) { return new Promise(function (res, rej) { var t = db.transaction('draft', mode); var q = fn(t.objectStore('draft')); t.oncomplete = function () { res(q && q.result); db.close(); }; t.onerror = function () { rej(t.error); db.close(); }; }); }); }
+    function scheduleDraft() { clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 1200); }
+    function saveDraft() {
+        if (!dirty || !(state.rows.length || state.files.length)) return;
+        var d = { at: Date.now(), savedName: savedName, header: header(), blobs: state.files.map(function (f) { return f.blob; }) };
+        try { localStorage.setItem('pageturner.draft', JSON.stringify({ at: d.at, name: d.header.name, rows: d.header.rows.length })); } catch (_) {}
+        idbDo('readwrite', function (st) { return st.put(d, 'current'); }).catch(function () {});
+    }
+    function clearDraft() { clearTimeout(draftTimer); try { localStorage.removeItem('pageturner.draft'); } catch (_) {} idbDo('readwrite', function (st) { return st.delete('current'); }).catch(function () {}); }
+    function offerDraft() {
+        return idbDo('readonly', function (st) { return st.get('current'); }).then(function (d) {
+            if (!d || !d.header) return false;
+            var when = new Date(d.at).toLocaleString();
+            if (!confirm('Restore your unsaved Composer work "' + d.header.name + '" from ' + when + '?\n(' + d.header.rows.length + ' rows, ' + d.header.pdfs.length + ' PDFs)\n\nCancel = discard it.')) { clearDraft(); return false; }
+            applyProject(d.header, d.blobs, d.savedName || null); dirty = true; updateSaveState(); saveDraft();
+            notice('Restored unsaved work from ' + when + '. Press "Save & Activate" to keep it.', 'ok');
+            return true;
+        }).catch(function (e) { console.error('Draft restore failed', e); return false; });
+    }
     window.addEventListener('beforeunload', function (e) { if (dirty && state.rows.length) { e.preventDefault(); e.returnValue = ''; } });
 
     var noticeEl = $('notice');
@@ -376,14 +407,21 @@
     var saving = false;
     function saveToMac() {
         if (saving || !canSave()) return Promise.resolve(false);
-        saving = true;
         var name = projectName();
-        return upload(name, buildContainer()).then(function (j) {
-            saving = false; savedName = name; dirty = false;
+        var check = (savedName === name) ? Promise.resolve(true) : api('/projects').then(function (j) {
+            var exists = (j.projects || []).some(function (p) { return p.name === name; });
+            return !exists || confirm('A different project named "' + name + '" already exists in ~/PageTurnerProjects.\n\nReplace it? (The old version is kept as "' + name + '.pdset.bak".)');
+        }, function () { return true; });
+        saving = true;
+        return check.then(function (ok) {
+            if (!ok) { saving = false; notice('Not saved. Choose another project name, or confirm to replace.', ''); return Promise.reject({ cancelled: true }); }
+            return upload(name, buildContainer());
+        }).then(function (j) {
+            saving = false; savedName = name; dirty = false; clearDraft(); updateSaveState();
             var v = validate(), probs = state.rows.filter(function (r) { return v[r.id].level !== 'ok'; }).length;
             notice('Saved ' + j.file + ' (' + fmtSize(j.size) + ', ' + j.pdfs + ' PDF' + (j.pdfs === 1 ? '' : 's') + ' inside)' + (probs ? ' – ' + probs + ' row' + (probs === 1 ? ' has' : 's have') + ' warnings' : ''), probs ? '' : 'ok');
             return true;
-        }, function (e) { saving = false; notice('Save failed: ' + e.message, 'error'); return false; });
+        }, function (e) { saving = false; if (e && e.cancelled) return false; notice('Save failed: ' + e.message, 'error'); return false; });
     }
     $('btn-save-mac').addEventListener('click', saveToMac);
     $('btn-activate').addEventListener('click', function () {
@@ -404,12 +442,13 @@
             b.textContent = a.active ? 'Active in PageTurner: ' + a.name : 'No active project – viewer uses plain Program Change → page';
             b.className = 'banner' + (a.active ? ' on' : '');
             $('btn-deactivate').hidden = !a.active;
+            updateSaveState();
         }).catch(function () {});
     }
     function testPc(r) {
         var pc = toInt(r.pc);
         if (isNaN(pc)) return notice('Enter a valid Program Change number first.', 'error');
-        if (dirty || projectActiveName !== projectName()) return notice('Test uses the saved, active project. Press "Save & set active" first.', '');
+        if (dirty || projectActiveName !== projectName()) return notice('Test uses the saved, active project. Press "Save & Activate" first.', '');
         api('/test-pc', jsonOpts('POST', { pc: pc })).then(function (j) {
             notice(j.found ? 'Sent PC ' + pc + ' → ' + j.song + ' page ' + j.page : 'PC ' + pc + ' is not in the active project', j.found ? 'ok' : '');
         }, function (e) { notice(e.message, 'error'); });
@@ -422,11 +461,12 @@
         sortFiles();
         state.rows = h.rows.map(function (r) { return newRow({ pc: String(r.pc), song: r.song, page: String(r.page) }); });
         savedName = savedAs || null; dirty = false;
-        $('pdf-summary').textContent = ''; rebuild();
+        if (savedAs) clearDraft();
+        $('pdf-summary').textContent = ''; rebuild(); updateSaveState();
     }
     $('btn-new').addEventListener('click', function () {
         if (dirty && (state.rows.length || state.files.length) && !confirm('Discard unsaved changes?')) return;
-        resetFiles(); state.rows = []; nameEl.value = 'Untitled'; dirty = false; savedName = null; notice(''); rebuild();
+        resetFiles(); state.rows = []; nameEl.value = 'Untitled'; dirty = false; savedName = null; clearDraft(); notice(''); rebuild(); updateSaveState();
     });
     // Open from ~/PageTurnerProjects: header first, then each PDF is fetched into memory-backed blobs.
     function openFromMac(name, onlyIfIdle) {
@@ -507,10 +547,24 @@
     });
 
     // start
+    nameEl.addEventListener('input', function () { if (state.rows.length || state.files.length) markDirty(); else updateSaveState(); });
     loadActive();
-    api('/projects').then(function (j) {
-        if (j.active) return openFromMac(j.active, true);
-    }).catch(function () { $('pdf-summary').textContent = ''; });
+    offerDraft().then(function (restored) {
+        if (restored) return;
+        return api('/projects').then(function (j) {
+            if (j.active) return openFromMac(j.active, true);
+        }).catch(function () { $('pdf-summary').textContent = ''; });
+    });
+    // live MIDI line (input + last Program Change), polled from the server
+    function pollMidi() {
+        fetch('/api/status').then(function (r) { return r.json(); }).then(function (st) {
+            var m = st.midi || {}, e = $('midi-state');
+            var lp = m.lastPc ? ' · last Pgm ' + m.lastPc.pc + ' (' + new Date(m.lastPc.at).toLocaleTimeString() + ')' : '';
+            if (m.connectedPort) { e.textContent = 'MIDI: ' + m.connectedPort + lp; e.className = 'pill muted'; }
+            else { e.textContent = m.wantedPort ? 'MIDI: "' + m.wantedPort + '" lost' : 'MIDI: no input'; e.className = 'pill bad'; }
+        }).catch(function () { var e = $('midi-state'); e.textContent = 'Server offline'; e.className = 'pill bad'; });
+    }
+    pollMidi(); setInterval(pollMidi, 2000);
     rebuild();
     window.__composer = { state: state, validate: validate, addFiles: addFiles };
 })();

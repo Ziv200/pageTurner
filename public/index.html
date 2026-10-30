@@ -40,6 +40,8 @@
         <div id="filename-display"></div>
         <div id="song-info"></div>
         <div id="notice"></div>
+        <div id="conn-badge" hidden></div>
+        <video id="nosleep" src="vendor/nosleep.mp4" muted playsinline loop preload="auto" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;"></video>
 
         <!-- Song list (project mode) -->
         <button id="menu-btn" aria-label="Song list">
@@ -68,6 +70,15 @@
                     <select id="midi-port-select">
                         <option value="" disabled selected>Loading...</option>
                     </select>
+                </div>
+
+                <div class="setting-group">
+                    <div id="midi-live" style="color:#ccc;font-size:15px;">MIDI: &ndash;</div>
+                    <div id="last-pc" style="color:#ccc;font-size:15px;margin-top:4px;">Last Program Change: none yet</div>
+                </div>
+                <div class="setting-group">
+                    <small style="display:block;color:#aaa;">Page turns: tap the left/right edge, or use a Bluetooth pedal / keyboard (&larr; &rarr;, Page Up/Down, Space).<br>
+                    Screen stays awake while PageTurner is open (after your first tap). For safety also set iPad <b>Settings &rsaquo; Display &amp; Brightness &rsaquo; Auto-Lock &rsaquo; Never</b>.</small>
                 </div>
 
                 <div class="setting-group" style="padding-top: 20px; border-top: 1px solid #444;">

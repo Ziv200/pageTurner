@@ -262,6 +262,8 @@ module.exports = function createComposer(io) {
             if (received !== len) throw httpError(400, 'Upload incomplete');
             const c = await readContainer(tmp);
             if (c.header.name !== n) { /* name in header follows the file name */ }
+            // keep ONE backup of the previous version (APFS clone = instant, no extra space until it changes)
+            try { await fs.promises.copyFile(file, file + '.bak', fs.constants.COPYFILE_FICLONE); } catch (_) { /* no previous file */ }
             await fs.promises.rename(tmp, file); // atomic
             if (active && active.name === n) await setActive(n).catch(() => {});
             res.json({ ok: true, file, size: c.fileSize, pdfs: c.header.pdfs.length });

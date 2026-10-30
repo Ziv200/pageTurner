@@ -21,6 +21,9 @@ app.use('/lib', express.static(path.join(__dirname, 'node_modules/pdfjs-dist/bui
 // MIDI State
 let midiInput = null;
 let currentMidiInputName = null;
+let wantedMidiInputName = null;   // the port the user chose; reconnected automatically if it comes back
+let lastPc = null;                // { pc, raw, port, at } last Program Change received from MIDI
+let lastPortsKey = '';
 
 function getMidiPorts() {
     return easymidi.getInputs();
@@ -59,12 +62,15 @@ function setMidiPort(portName) {
 
         midiInput = new easymidi.Input(targetName);
         currentMidiInputName = targetName;
+        wantedMidiInputName = targetName;
 
         console.log(`\n✅ Listening to MIDI Input: "${targetName}"`);
         console.log('   Mapping: Ableton Pgm N -> song + page (active project) or PDF page N (no project)');
 
         midiInput.on('program', (msg) => {
             // Active project: PC -> song + page lookup. No project: PC -> page (original behaviour).
+            lastPc = { pc: msg.number + 1, raw: msg.number, port: targetName, at: Date.now() };
+            io.emit('midi_pc', lastPc);
             composer.handleProgramChange(msg.number, 'midi');  // raw 0-127; mapped to Ableton-style n+1 inside
         });
 
@@ -107,16 +113,50 @@ if (initialPort) {
     console.log('\n⚠️ No MIDI Inputs found! Make sure IAC Driver is enabled in Audio MIDI Setup.');
 }
 
+function midiStatus() {
+    return { connectedPort: currentMidiInputName, wantedPort: wantedMidiInputName, availablePorts: getMidiPorts(), lastPc };
+}
+
+// MIDI watchdog: every 3 s re-scan the ports. If the chosen port vanished (IAC disabled, Ableton/interface
+// restarted, cable pulled) close it; when it comes back, reconnect automatically. Clients are told on every change.
+setInterval(() => {
+    let ports;
+    try { ports = getMidiPorts(); } catch (_) { return; }
+    let changed = false;
+    if (currentMidiInputName && !ports.includes(currentMidiInputName)) {
+        console.warn(`\n⚠️ MIDI Input "${currentMidiInputName}" disappeared - waiting for it to come back`);
+        const keep = wantedMidiInputName; closeMidiPort(); currentMidiInputName = null; wantedMidiInputName = keep; changed = true;
+    }
+    if (!currentMidiInputName && wantedMidiInputName && ports.includes(wantedMidiInputName)) {
+        console.log(`\n🔁 MIDI Input "${wantedMidiInputName}" is back - reconnecting`);
+        setMidiPort(wantedMidiInputName); changed = true;
+    }
+    const key = ports.join('\n');
+    if (key !== lastPortsKey) { lastPortsKey = key; changed = true; }
+    if (changed) io.emit('midi_status', midiStatus());
+}, 3000).unref();
+
+// Read-only status for the Composer / desktop app (MIDI state + network addresses)
+app.get('/api/status', (req, res) => res.json({ port: server.address() && server.address().port, midi: midiStatus(), addresses: networkAddresses(), project: composer.publicState() }));
+
+function networkAddresses() {
+    const os = require('os');
+    const port = server.address() ? server.address().port : PORT;
+    const out = [];
+    const ifs = os.networkInterfaces();
+    Object.keys(ifs).forEach(n => ifs[n].forEach(i => { if (i.family === 'IPv4' && !i.internal) out.push({ iface: n, url: `http://${i.address}:${port}` }); }));
+    const h = os.hostname();
+    if (h) out.push({ iface: 'hostname', url: `http://${h.endsWith('.local') ? h : h + '.local'}:${port}` });
+    return out;
+}
+
 // Socket.io Connection
 io.on('connection', (socket) => {
     console.log('📱 Client connected:', socket.id);
 
     // Send current state on connection
     socket.emit('project_state', composer.publicState());
-    socket.emit('midi_status', {
-        connectedPort: currentMidiInputName,
-        availablePorts: getMidiPorts()
-    });
+    socket.emit('midi_status', midiStatus());
 
     socket.on('get_midi_ports', () => {
         socket.emit('midi_ports_list', {
@@ -129,10 +169,7 @@ io.on('connection', (socket) => {
         console.log(`Client requested to switch MIDI port to: ${portName}`);
         const success = setMidiPort(portName);
         // Broadcast new status to all clients
-        io.emit('midi_status', {
-            connectedPort: currentMidiInputName,
-            availablePorts: getMidiPorts()
-        });
+        io.emit('midi_status', midiStatus());
     });
 
     socket.on('disconnect', () => {

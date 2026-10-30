@@ -11,6 +11,8 @@
 <header>
     <h1>Composer</h1>
     <div id="active-banner" class="banner">No active project &ndash; viewer uses plain Program Change &rarr; page</div>
+    <span id="save-state" class="pill">Not saved</span>
+    <span id="midi-state" class="pill muted">MIDI: –</span>
     <a class="back" href="/">&larr; PageTurner</a>
 </header>
 
@@ -25,7 +27,7 @@
             <button id="btn-save-mac" title="Saves ~/PageTurnerProjects/&lt;name&gt;.pdset with the PDFs inside">Save as project</button>
             <button id="btn-save-file" title="Download a self-contained .pdset file (PDFs included)">Download .pdset</button>
             <button id="btn-open-file" title="Open a .pdset file from disk">Open .pdset file&hellip;</button>
-            <button id="btn-activate" class="primary" title="Saves, then makes the viewer use this table">Save &amp; set active</button>
+            <button id="btn-activate" class="primary" title="Saves, then makes the viewer use this table">Save &amp; Activate</button>
             <button id="btn-deactivate" hidden>Deactivate</button>
         </div>
     </section>
