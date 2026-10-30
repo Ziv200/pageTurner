@@ -1,0 +1,60 @@
+name: Desktop app (Windows + macOS)
+on:
+  push:
+    branches: [desktop]
+  workflow_dispatch:
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Install
+        run: |
+          npm install --no-audit --no-fund
+          cd desktop
+          npm install --no-audit --no-fund
+      - name: Smoke test - plain server (node) starts and lists MIDI ports
+        shell: pwsh
+        run: |
+          $env:PORT = "3917"; $env:PAGETURNER_PROJECTS = "$env:RUNNER_TEMP\pt-projects"
+          New-Item -ItemType Directory -Force $env:PAGETURNER_PROJECTS | Out-Null
+          $p = Start-Process node -ArgumentList "server.js" -PassThru -NoNewWindow
+          $ok = $false
+          for ($i = 0; $i -lt 30; $i++) { Start-Sleep 1; try { $r = Invoke-RestMethod http://127.0.0.1:3917/api/status; $ok = $true; break } catch {} }
+          Stop-Process $p -Force
+          if (-not $ok) { throw "server did not answer /api/status" }
+          $r | ConvertTo-Json -Depth 5
+      - name: Build NSIS installers (x64 + arm64)
+        working-directory: desktop
+        run: npm run dist:win
+      - name: Smoke test - packaged app (headless) starts server and loads native MIDI
+        shell: pwsh
+        run: |
+          $env:PAGETURNER_SMOKE = "1"; $env:PAGETURNER_PORT = "3918"; $env:PAGETURNER_PROJECTS = "$env:RUNNER_TEMP\pt-projects"
+          $p = Start-Process "desktop\dist\win-unpacked\PageTurner.exe" -PassThru -Wait -RedirectStandardOutput out.txt -RedirectStandardError err.txt
+          Get-Content out.txt, err.txt
+          if ($p.ExitCode -ne 0 -or -not (Select-String -Path out.txt -Pattern "SMOKE_STATUS" -Quiet)) { throw "packaged app smoke test failed" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PageTurner-Windows
+          path: |
+            desktop/dist/PageTurner-Setup-*-x64.exe
+            desktop/dist/PageTurner-Setup-*-arm64.exe
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Build dmgs (arm64 + x64)
+        run: |
+          npm install --no-audit --no-fund
+          cd desktop
+          npm install --no-audit --no-fund
+          npm run dist:split
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PageTurner-macOS
+          path: desktop/dist/*.dmg

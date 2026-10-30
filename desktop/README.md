@@ -46,3 +46,22 @@ npm run dist           # universal .dmg in desktop/dist/   (npm run dist:split =
 ```
 The app runs the same `server.js` as `node server.js`. Env overrides: `PAGETURNER_PROJECTS` (projects folder),
 `PAGETURNER_PORT` (preferred port). `PAGETURNER_SNAPSHOT=<dir>` is a test-only screenshot helper.
+
+---
+
+## Windows (10 / 11)
+
+**Install:** download `PageTurner-Setup-1.0.0-x64.exe` (or `-arm64.exe` for ARM PCs) and run it.
+The installer is not code-signed, so **SmartScreen** shows "Windows protected your PC" → click **More info → Run anyway**.
+
+**Virtual MIDI port (loopMIDI):** Windows has no built-in equivalent of the Mac's IAC Driver.
+1. Install the free **loopMIDI**: https://www.tobias-erichsen.de/software/loopmidi.html
+2. Open it, click **+** to create a port (e.g. "loopMIDI Port"). Leave loopMIDI running (enable its "start with Windows" option).
+3. In Ableton: *Options › Preferences › Link, Tempo & MIDI* → enable **Track** on output "loopMIDI Port" and send Program Changes to it.
+4. In PageTurner's setup window click **Refresh list** and pick "loopMIDI Port".
+
+**Windows Firewall:** the first time PageTurner starts, Windows asks whether to allow it on the network. Tick **Private networks** and click **Allow** – otherwise the iPad cannot connect. (Make sure your Wi-Fi is set to *Private* in Windows network settings.) If you clicked Cancel: *Windows Security › Firewall › Allow an app through firewall* → enable PageTurner (Private).
+
+**Where things are:** PageTurner lives in the notification area next to the clock (click **^** if hidden); left- or right-click the icon for the menu. Projects default to `C:\Users\<you>\PageTurnerProjects`; settings and log are in `%APPDATA%\PageTurner` (log: `logs\pageturner.log`). "Launch at Login" adds PageTurner to Windows startup apps.
+
+**Build:** `npm run dist:win` (cross-builds from a Mac too) or the GitHub Actions workflow *Desktop app* (`.github/workflows/desktop.yml`), which builds the installers on `windows-latest`, runs a headless smoke test, and uploads them as an artifact.

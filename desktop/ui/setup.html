@@ -2,7 +2,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
 <link rel="stylesheet" href="style.css"></head><body>
 <h1>Welcome to PageTurner</h1>
-<div class="muted">Your Mac sends MIDI Program Changes (e.g. from Ableton) → PageTurner shows the right sheet-music page on your iPad. PageTurner lives in the menu bar (the page icon at the top right of the screen).</div>
+<div class="muted">Your computer sends MIDI Program Changes (e.g. from Ableton) → PageTurner shows the right sheet-music page on your iPad. PageTurner lives in the menu bar <span class="mac-only">(the page icon at the top right of the screen)</span><span class="win-only">(the notification area next to the clock – click ^ if it’s hidden)</span>.</div>
 
 <div class="step"><h2><span class="num">1</span>Projects folder</h2>
   <div>Your projects (<code>.pdset</code> files, PDFs included) are kept in:</div>
@@ -11,19 +11,28 @@
 </div>
 
 <div class="step"><h2><span class="num">2</span>MIDI input</h2>
+  <div class="mac-only">
   <div>To send Program Changes from Ableton on this Mac, turn on the built-in <b>IAC Driver</b> once:</div>
   <ol>
     <li>Click <b>Open Audio MIDI Setup</b> below, then in its menu choose <b>Window › Show MIDI Studio</b>.</li>
     <li>Double-click <b>IAC Driver</b>, tick <b>“Device is online”</b>, click <b>Apply</b>.</li>
     <li>In Ableton: <i>Settings › Link, Tempo &amp; MIDI</i> – turn on <b>Track</b> for output “IAC Driver Bus 1”, then set a clip’s <b>Pgm</b> number and send the MIDI to the IAC bus.</li>
-  </ol>
-  <div class="row"><button id="ams">Open Audio MIDI Setup</button><button id="refresh">Refresh list</button></div>
+  </ol></div>
+  <div class="win-only">
+  <div>Windows has no built-in virtual MIDI port. Install the free <b>loopMIDI</b> once:</div>
+  <ol>
+    <li>Click <b>Get loopMIDI</b> below, download and install it, then open loopMIDI.</li>
+    <li>Click <b>+</b> to create a port (e.g. “loopMIDI Port”). Keep loopMIDI running (it can start with Windows).</li>
+    <li>In Ableton: <i>Options › Preferences › Link, Tempo &amp; MIDI</i> – turn on <b>Track</b> for output “loopMIDI Port”, then send Program Changes to it.</li>
+    <li>Then click <b>Refresh list</b> and pick “loopMIDI Port” below.</li>
+  </ol></div>
+  <div class="row"><button id="ams" class="mac-only">Open Audio MIDI Setup</button><button id="loop" class="win-only">Get loopMIDI</button><button id="refresh">Refresh list</button></div>
   <div class="row">Listen to: <select id="midi"></select> <span id="midistate"></span></div>
   <div class="row muted" id="lastpc">Last Program Change: none yet</div>
 </div>
 
 <div class="step"><h2><span class="num">3</span>Open it on your iPad</h2>
-  <div>Connect the iPad to the <b>same Wi-Fi</b> as this Mac (or by USB with <i>System Settings › General › Sharing › Internet Sharing</i>). Then scan this with the iPad camera, or type the address in Safari:</div>
+  <div>Connect the iPad to the <b>same Wi-Fi</b> as this computer<span class="mac-only"> (or by USB with <i>System Settings › General › Sharing › Internet Sharing</i>)</span>.<span class="win-only"> If Windows Firewall asks about PageTurner, allow <b>Private networks</b> – otherwise the iPad can't connect.</span> Then scan this with the iPad camera, or type the address in Safari:</div>
   <div id="qr" class="qr"></div>
   <div class="muted">Tip: on the iPad, tap Share › <b>Add to Home Screen</b>, and set <i>Settings › Display &amp; Brightness › Auto-Lock</i> to <b>Never</b> for gigs. Page turns: tap the left/right edge or use a Bluetooth pedal.</div>
 </div>

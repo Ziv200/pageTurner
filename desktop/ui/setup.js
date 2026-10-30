@@ -2,11 +2,12 @@ let dir = null, info = null;
 const $ = id => document.getElementById(id);
 async function load() {
     info = await window.pt.info();
+    document.body.classList.toggle('mac', info.platform === 'darwin');
     if (!dir) dir = info.settings.projectsDir; $('dir').textContent = dir;
     $('sample').parentElement.style.display = info.sampleAvailable ? '' : 'none';
     const m = info.midi || {}, sel = $('midi'), ports = m.availablePorts || [];
     sel.innerHTML = '';
-    if (!ports.length) { sel.innerHTML = '<option>No MIDI inputs found</option>'; sel.disabled = true; $('midistate').innerHTML = '<span class="bad">Turn on the IAC Driver (above), then Refresh</span>'; }
+    if (!ports.length) { sel.innerHTML = '<option>No MIDI inputs found</option>'; sel.disabled = true; $('midistate').innerHTML = (info.platform === 'darwin' ? '<span class="bad">Turn on the IAC Driver (above), then Refresh</span>' : '<span class="bad">Install loopMIDI and create a port (above), then Refresh</span>'); }
     else {
         sel.disabled = false;
         if (!m.connectedPort) sel.append(new Option('— choose —', ''));
@@ -16,11 +17,12 @@ async function load() {
     $('lastpc').textContent = m.lastPc ? 'Last Program Change: Pgm ' + m.lastPc.pc + ' at ' + new Date(m.lastPc.at).toLocaleTimeString() + ' ✓ MIDI is arriving' : 'Last Program Change: none yet – send one from Ableton to test';
     const q = $('qr'); q.innerHTML = '';
     const urls = info.urls.filter(u => u.iface !== 'hostname');
-    if (!urls.length) q.innerHTML = '<p class="bad">This Mac has no network address yet. Join Wi-Fi or turn on Internet Sharing for the iPad USB cable.</p>';
+    if (!urls.length) q.innerHTML = '<p class="bad">This computer has no network address yet. Join Wi-Fi (on a Mac, Internet Sharing also works for an iPad USB cable).</p>';
     urls.slice(0, 2).forEach(u => { const d = document.createElement('div'); d.innerHTML = '<img src="' + u.qr + '"><div class="url">' + u.url + '</div><div class="muted">' + u.iface + '</div>'; q.append(d); });
 }
 $('choose').onclick = async () => { const d = await window.pt.chooseFolder(); if (d) { dir = d; $('dir').textContent = d; } };
 $('ams').onclick = () => window.pt.openAudioMidiSetup();
+$('loop').onclick = () => window.pt.openUrl('https://www.tobias-erichsen.de/software/loopmidi.html');
 $('refresh').onclick = load;
 $('midi').onchange = async e => { if (e.target.value) { await window.pt.setMidi(e.target.value); setTimeout(load, 500); } };
 $('composer').onclick = () => window.pt.openUrl('http://localhost:' + info.port + '/composer/');

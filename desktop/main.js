@@ -4,6 +4,9 @@ const { app, Tray, Menu, BrowserWindow, ipcMain, shell, clipboard, dialog, nativ
 const path = require('path'), fs = require('fs'), os = require('os'), net = require('net');
 
 if (!app.requestSingleInstanceLock()) { app.quit(); return; }
+const IS_MAC = process.platform === 'darwin', IS_WIN = process.platform === 'win32';
+const LOOPMIDI_URL = 'https://www.tobias-erichsen.de/software/loopmidi.html';
+if (IS_WIN) app.setAppUserModelId('com.pageturner.desktop');
 
 // ---------- settings + log ----------
 const userDir = app.getPath('userData');
@@ -69,7 +72,8 @@ function connectSocket() {
     sock.on('project_state', p => { status.project = p; buildMenu(); });
     sock.on('midi_pc', p => {
         status.midi.lastPc = p; buildMenu();
-        tray.setTitle(' Pgm ' + p.pc); clearTimeout(lastPcTimer); lastPcTimer = setTimeout(() => tray.setTitle(''), 4000);
+        if (IS_MAC) { tray.setTitle(' Pgm ' + p.pc); clearTimeout(lastPcTimer); lastPcTimer = setTimeout(() => tray.setTitle(''), 4000); }
+        else tray.setToolTip('PageTurner – last Pgm ' + p.pc);
     });
 }
 
@@ -95,24 +99,26 @@ function buildMenu() {
     t.push({ label: m.connectedPort ? 'MIDI input: ' + m.connectedPort : (m.wantedPort ? '⚠️ MIDI input "' + m.wantedPort + '" is gone – waiting' : '⚠️ No MIDI input'),
         submenu: [...(ports.length ? ports.map(p => ({ label: p, type: 'radio', checked: p === m.connectedPort, click: () => setMidi(p) }))
                                    : [{ label: 'No MIDI inputs found', enabled: false }]),
-                  { type: 'separator' }, { label: 'Open Audio MIDI Setup (enable IAC Driver)…', click: openAudioMidiSetup }] });
+                  { type: 'separator' }, IS_MAC ? { label: 'Open Audio MIDI Setup (enable IAC Driver)…', click: openAudioMidiSetup }
+                                                : { label: 'Get loopMIDI (virtual MIDI port for Windows)…', click: () => shell.openExternal(LOOPMIDI_URL) }] });
     const lp = m.lastPc; t.push({ label: lp ? `Last Program Change: Pgm ${lp.pc}  (${new Date(lp.at).toLocaleTimeString()})` : 'Last Program Change: none yet', enabled: false });
     t.push({ label: proj.active ? 'Active project: ' + proj.name : 'No active project (PC N → page N)', enabled: false });
     t.push({ type: 'separator' });
     t.push({ label: 'Open Composer', click: () => shell.openExternal('http://localhost:' + port + '/composer/') });
-    t.push({ label: 'Open Viewer on this Mac', click: () => shell.openExternal('http://localhost:' + port + '/') });
+    t.push({ label: IS_MAC ? 'Open Viewer on this Mac' : 'Open Viewer on this PC', click: () => shell.openExternal('http://localhost:' + port + '/') });
     t.push({ label: 'Open Projects Folder', click: () => shell.openPath(settings.projectsDir) });
     t.push({ label: 'Show Log', click: () => shell.openPath(LOG) });
     t.push({ type: 'separator' });
     t.push({ label: 'Setup…', click: showSetup });
     t.push({ label: 'Launch at Login', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin, click: i => app.setLoginItemSettings({ openAtLogin: i.checked }) });
     t.push({ type: 'separator' });
-    t.push({ label: 'Quit PageTurner', accelerator: 'Command+Q', click: () => app.quit() });
+    t.push(IS_MAC ? { label: 'Quit PageTurner', accelerator: 'Command+Q', click: () => app.quit() } : { label: 'Quit PageTurner', click: () => app.quit() });
     tray.setContextMenu(Menu.buildFromTemplate(t));
     tray.setToolTip('PageTurner – ' + (urls[0] ? urls[0].url : 'port ' + port));
 }
 
 function openAudioMidiSetup() {
+    if (!IS_MAC) return shell.openExternal(LOOPMIDI_URL);
     const p = '/System/Applications/Utilities/Audio MIDI Setup.app';
     shell.openPath(fs.existsSync(p) ? p : '/Applications/Utilities/Audio MIDI Setup.app');
 }
@@ -132,7 +138,7 @@ ipcMain.handle('info', async () => {
     const QR = require('qrcode');
     const urls = ipadUrls();
     for (const u of urls) u.qr = await QR.toDataURL(u.url, { margin: 1, width: 300 });
-    return { port, urls, midi: status.midi, settings, sampleAvailable: fs.existsSync(sampleSrc()), projectsDirDefault: path.join(os.homedir(), 'PageTurnerProjects') };
+    return { port, platform: process.platform, urls, midi: status.midi, settings, sampleAvailable: fs.existsSync(sampleSrc()), projectsDirDefault: path.join(os.homedir(), 'PageTurnerProjects') };
 });
 ipcMain.handle('choose-folder', async () => {
     const r = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'], defaultPath: settings.projectsDir });
@@ -160,9 +166,17 @@ ipcMain.handle('finish-setup', async (e, { projectsDir, addSample }) => {
 app.on('second-instance', () => showSetup());
 app.on('window-all-closed', e => { /* keep running in the menu bar */ });
 app.whenReady().then(async () => {
+    if (process.env.PAGETURNER_SMOKE) {   // CI: start the bundled server without UI, print status, quit
+        try { await startServer(); console.log('SMOKE_STATUS ' + JSON.stringify(status)); app.exit(0); }
+        catch (e) { console.error('SMOKE_FAIL', e); app.exit(1); }
+        return;
+    }
     if (app.dock) app.dock.hide();
-    const icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'trayTemplate.png')); icon.setTemplateImage(true);
+    let icon;
+    if (IS_MAC) { icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'trayTemplate.png')); icon.setTemplateImage(true); }
+    else icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'tray-win.png'));   // colour icon for the Windows notification area
     tray = new Tray(icon);
+    if (!IS_MAC) tray.on('click', () => tray.popUpContextMenu());   // Windows: left-click opens the menu too
     tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Starting PageTurner…', enabled: false }, { label: 'Quit', click: () => app.quit() }]));
     try { await startServer(); }
     catch (err) {

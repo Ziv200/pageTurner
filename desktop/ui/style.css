@@ -11,3 +11,5 @@ ol { margin: 6px 0 8px 18px; padding: 0; } li { margin: 3px 0; }
 .qr { text-align: center; } .qr img { width: 220px; height: 220px; image-rendering: pixelated; }
 .url { font: 600 16px ui-monospace, Menlo, monospace; margin: 6px 0 2px; }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+
+body.mac .win-only, body:not(.mac) .mac-only { display: none; }

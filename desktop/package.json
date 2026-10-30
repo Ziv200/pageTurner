@@ -9,7 +9,8 @@
     "prepare-server": "node scripts/prepare.js",
     "start": "npm run prepare-server && electron .",
     "dist": "npm run prepare-server && electron-builder --mac --universal",
-    "dist:split": "npm run prepare-server && electron-builder --mac --arm64 --x64"
+    "dist:split": "npm run prepare-server && electron-builder --mac --arm64 --x64",
+    "dist:win": "npm run prepare-server && electron-builder --win nsis --x64 --arm64"
   },
   "dependencies": {
     "easymidi": "^3.1.0",
@@ -34,7 +35,10 @@
       "assets/**",
       "server/**",
       "package.json",
-      "node_modules/**"
+      "node_modules/**",
+      "!**/*.pdb",
+      "!**/@julusian/midi/build/**",
+      "!**/@julusian/midi/src/**"
     ],
     "extraResources": [
       {
@@ -74,6 +78,29 @@
         }
       ]
     },
-    "artifactName": "PageTurner-${version}-${arch}.${ext}"
+    "artifactName": "PageTurner-${version}-${arch}.${ext}",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.png",
+      "artifactName": "PageTurner-Setup-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PageTurner",
+      "runAfterFinish": true
+    },
+    "npmRebuild": false
   }
 }

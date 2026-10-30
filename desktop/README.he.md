@@ -39,3 +39,23 @@ PageTurner יושבת ב**שורת התפריטים** (אייקון של דף, �
 - **שמירה על פרויקט קיים** שומרת את הגרסה הקודמת בשם `‎<name>.pdset.bak`.
 
 </div>
+
+---
+
+<div dir="rtl">
+
+## Windows (10 / 11)
+
+**התקנה:** הורידו את `PageTurner-Setup-1.0.0-x64.exe` (או `-arm64.exe` למחשבי ARM) והריצו. ההתקנה לא חתומה, לכן **SmartScreen** יציג "Windows protected your PC" ← לחצו **More info ← Run anyway**.
+
+**פורט MIDI וירטואלי (loopMIDI):** ל-Windows אין מקבילה מובנית ל-IAC Driver של המק.
+1. התקינו את **loopMIDI** החינמי: https://www.tobias-erichsen.de/software/loopmidi.html
+2. פתחו אותו ולחצו **+** ליצירת פורט (למשל "loopMIDI Port"). השאירו אותו פועל (אפשר להפעיל עם Windows).
+3. באבלטון: *Options › Preferences › Link, Tempo & MIDI* ← הפעילו **Track** בפלט "loopMIDI Port" ושלחו אליו Program Change.
+4. בחלון ההגדרה של PageTurner לחצו **Refresh list** ובחרו "loopMIDI Port".
+
+**חומת האש של Windows:** בהפעלה הראשונה Windows ישאל אם לאפשר ל-PageTurner גישה לרשת. סמנו **Private networks** ולחצו **Allow** – אחרת האייפד לא יתחבר. (ודאו שרשת ה-Wi-Fi מוגדרת כ-*Private*.) אם לחצתם Cancel: *Windows Security › Firewall › Allow an app through firewall* ← הפעילו את PageTurner (Private).
+
+**איפה הכול:** PageTurner נמצא באזור ההודעות ליד השעון (לחצו **^** אם מוסתר); לחיצה על האייקון פותחת את התפריט. פרויקטים: `C:\Users\<you>\PageTurnerProjects`; הגדרות ולוג: `%APPDATA%\PageTurner`. "Launch at Login" מוסיף את PageTurner לאפליקציות ההפעלה.
+
+</div>
