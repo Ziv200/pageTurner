@@ -16,7 +16,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 const composer = require('./composer-api')(io);
 app.use('/api/composer', composer.router);
 app.get('/composer', (req, res) => res.redirect('/composer/'));
-app.use('/lib', express.static(path.join(__dirname, 'node_modules/pdfjs-dist/build')));
+// pdf.js for the viewer. Same folder as before for `node server.js`; require.resolve also finds it when packaged (desktop app).
+let pdfjsBuild = path.join(__dirname, 'node_modules/pdfjs-dist/build');
+try { if (!require('fs').existsSync(pdfjsBuild)) pdfjsBuild = path.dirname(require.resolve('pdfjs-dist/build/pdf.js')); } catch (_) {}
+app.use('/lib', express.static(pdfjsBuild));
 
 // MIDI State
 let midiInput = null;

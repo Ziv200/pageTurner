@@ -1,0 +1,79 @@
+{
+  "name": "pageturner-desktop",
+  "productName": "PageTurner",
+  "version": "1.0.0",
+  "description": "PageTurner menu-bar app: MIDI Program Change -> sheet music on your iPad",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "prepare-server": "node scripts/prepare.js",
+    "start": "npm run prepare-server && electron .",
+    "dist": "npm run prepare-server && electron-builder --mac --universal",
+    "dist:split": "npm run prepare-server && electron-builder --mac --arm64 --x64"
+  },
+  "dependencies": {
+    "easymidi": "^3.1.0",
+    "express": "^5.2.1",
+    "ip": "^2.0.1",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^2.16.105",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.pageturner.desktop",
+    "productName": "PageTurner",
+    "files": [
+      "main.js",
+      "ui/**",
+      "assets/**",
+      "server/**",
+      "package.json",
+      "node_modules/**"
+    ],
+    "extraResources": [
+      {
+        "from": "build-resources/Sample Project.pdset",
+        "to": "Sample Project.pdset"
+      }
+    ],
+    "asarUnpack": [
+      "**/*.node"
+    ],
+    "mac": {
+      "category": "public.app-category.music",
+      "icon": "assets/icon.png",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "target": [
+        "dmg"
+      ],
+      "extendInfo": {
+        "LSUIElement": true,
+        "NSLocalNetworkUsageDescription": "PageTurner serves your sheet music to the iPad on your local network."
+      },
+      "x64ArchFiles": "**/@julusian/midi/prebuilds/**"
+    },
+    "dmg": {
+      "title": "PageTurner",
+      "contents": [
+        {
+          "x": 130,
+          "y": 150
+        },
+        {
+          "x": 410,
+          "y": 150,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "artifactName": "PageTurner-${version}-${arch}.${ext}"
+  }
+}

@@ -1,0 +1,32 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>PageTurner Setup</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
+<link rel="stylesheet" href="style.css"></head><body>
+<h1>Welcome to PageTurner</h1>
+<div class="muted">Your Mac sends MIDI Program Changes (e.g. from Ableton) → PageTurner shows the right sheet-music page on your iPad. PageTurner lives in the menu bar (the page icon at the top right of the screen).</div>
+
+<div class="step"><h2><span class="num">1</span>Projects folder</h2>
+  <div>Your projects (<code>.pdset</code> files, PDFs included) are kept in:</div>
+  <div class="row"><span id="dir" class="path"></span><button id="choose">Change…</button></div>
+  <label class="row"><input type="checkbox" id="sample" checked> Add a <b>Sample Project</b> (3 demo songs, Program Changes 1–4) so you can try it right away</label>
+</div>
+
+<div class="step"><h2><span class="num">2</span>MIDI input</h2>
+  <div>To send Program Changes from Ableton on this Mac, turn on the built-in <b>IAC Driver</b> once:</div>
+  <ol>
+    <li>Click <b>Open Audio MIDI Setup</b> below, then in its menu choose <b>Window › Show MIDI Studio</b>.</li>
+    <li>Double-click <b>IAC Driver</b>, tick <b>“Device is online”</b>, click <b>Apply</b>.</li>
+    <li>In Ableton: <i>Settings › Link, Tempo &amp; MIDI</i> – turn on <b>Track</b> for output “IAC Driver Bus 1”, then set a clip’s <b>Pgm</b> number and send the MIDI to the IAC bus.</li>
+  </ol>
+  <div class="row"><button id="ams">Open Audio MIDI Setup</button><button id="refresh">Refresh list</button></div>
+  <div class="row">Listen to: <select id="midi"></select> <span id="midistate"></span></div>
+  <div class="row muted" id="lastpc">Last Program Change: none yet</div>
+</div>
+
+<div class="step"><h2><span class="num">3</span>Open it on your iPad</h2>
+  <div>Connect the iPad to the <b>same Wi-Fi</b> as this Mac (or by USB with <i>System Settings › General › Sharing › Internet Sharing</i>). Then scan this with the iPad camera, or type the address in Safari:</div>
+  <div id="qr" class="qr"></div>
+  <div class="muted">Tip: on the iPad, tap Share › <b>Add to Home Screen</b>, and set <i>Settings › Display &amp; Brightness › Auto-Lock</i> to <b>Never</b> for gigs. Page turns: tap the left/right edge or use a Bluetooth pedal.</div>
+</div>
+
+<div class="row" style="justify-content:flex-end"><span id="msg" class="muted"></span><button id="composer">Open Composer</button><button id="done" class="primary">Finish</button></div>
+<script src="setup.js"></script></body></html>

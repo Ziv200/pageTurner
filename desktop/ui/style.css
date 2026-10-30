@@ -1,0 +1,13 @@
+body { font: 14px -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 22px 28px; color: #1d1d1f; background: #f5f5f7; }
+h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 16px; margin: 0 0 8px; }
+.step { background: #fff; border-radius: 12px; padding: 16px 18px; margin: 14px 0; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.num { display: inline-block; width: 22px; height: 22px; border-radius: 11px; background: #0071e3; color: #fff; text-align: center; line-height: 22px; font-weight: 700; margin-right: 6px; font-size: 13px; }
+button { font: inherit; padding: 6px 14px; border-radius: 7px; border: 1px solid #c7c7cc; background: #fff; cursor: pointer; }
+button.primary { background: #0071e3; color: #fff; border-color: #0071e3; font-weight: 600; }
+code, .path { font: 13px ui-monospace, Menlo, monospace; background: #f0f0f3; padding: 2px 6px; border-radius: 5px; word-break: break-all; }
+.muted { color: #6e6e73; font-size: 13px; } .ok { color: #1b7f3b; font-weight: 600; } .bad { color: #c62828; font-weight: 600; }
+select { font: inherit; padding: 5px; min-width: 260px; }
+ol { margin: 6px 0 8px 18px; padding: 0; } li { margin: 3px 0; }
+.qr { text-align: center; } .qr img { width: 220px; height: 220px; image-rendering: pixelated; }
+.url { font: 600 16px ui-monospace, Menlo, monospace; margin: 6px 0 2px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
